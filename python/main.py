@@ -10,8 +10,8 @@ from floor_grid import (
 
 def main():
     # Parameters
-    rows = 36
-    cols = 30
+    rows = 80
+    cols = 120
     door_size = 2
     min_room_width = 8
     min_building_area_ratio = 0.6
