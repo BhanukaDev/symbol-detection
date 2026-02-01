@@ -58,10 +58,8 @@ class BuildingShapeGenerator:
 
             current_cells = self._count_building_cells()
 
-        # Final cleanup to ensure smooth edges while maintaining connectivity
         self._smooth_edges()
 
-        # Center the building shape
         self._center_building()
 
         return self.grid

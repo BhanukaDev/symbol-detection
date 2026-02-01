@@ -4,9 +4,6 @@ from .building_generator import BuildingShapeGenerator
 from .room_generator import RoomDivider
 from .door_generator import DoorWindowGenerator
 from .visualizer import FloorPlanVisualizer
-from .place_non_overlapping_rect_rooms import (
-    place_non_overlapping_rect_rooms,
-)  # Keep existing
 from .symbol_placer import (
     Symbol,
     PlacedSymbol,
@@ -87,7 +84,6 @@ def get_floor_image(
     # Create the floor plan
     floor_plan_img = visualizer.create_floor_plan()
 
-    # Optionally add room labels
     if show_labels:
         floor_plan_img = visualizer.add_room_labels(floor_plan_img)
 
@@ -95,7 +91,6 @@ def get_floor_image(
 
 
 __all__ = [
-    "place_non_overlapping_rect_rooms",
     "generate_building_grid",
     "get_floor_image",
     "generate_building_with_symbols",
