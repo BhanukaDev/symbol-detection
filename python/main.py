@@ -1409,7 +1409,18 @@ class DoorWindowGenerator:
         )
 
 
-# After creating rooms
+# Create the building shape generator
+shape_gen = BuildingShapeGenerator(
+    base_grid,
+    door_size=door_size,
+    min_room_width=min_room_width,
+    min_building_area_ratio=min_building_area_ratio,
+)
+
+# Generate the building shape - THIS IS MISSING!
+base_grid = shape_gen.generate_building_shape()
+
+# Then divide into rooms
 room_divider = RoomDivider(base_grid, min_room_width=min_room_width)
 rooms = room_divider.divide_into_rooms()
 
@@ -1418,9 +1429,6 @@ door_window_gen = DoorWindowGenerator(
     base_grid, rooms, door_size=door_size, min_room_width=min_room_width
 )
 doors = door_window_gen.generate_doors()
-
-# Display the result
-door_window_gen.display_with_doors()
 
 
 import cv2
