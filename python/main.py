@@ -105,9 +105,9 @@ class Grid:
             print(row_ids)
 
 
-base_grid = Grid(28, 32)
-door_size = 2  # 2 grids wide
-min_room_width = 5  # a room's width or length can't be less than this
+base_grid = Grid(32, 48)
+door_size = 2  # 2 grid wide
+min_room_width = 8  # a room's width or length can't be less than this
 min_building_area_ratio = (
     0.6  # from all the cells of grid, this amount of cells should be inside building
 )
@@ -131,6 +131,7 @@ class BuildingShapeGenerator:
     def generate_building_shape(self):
         """
         Generate a connected building shape with smooth, rectangular edges.
+        Ensures no floating islands and maintains connectivity throughout.
         """
         # Start with a rectangular base in the center
         center_r = self.grid.rows // 2
@@ -156,17 +157,72 @@ class BuildingShapeGenerator:
 
         # Grow the building by adding rectangular chunks
         current_cells = self._count_building_cells()
+        failed_attempts = 0
+        max_failed_attempts = 10
 
-        while current_cells < self.target_building_cells:
+        while (
+            current_cells < self.target_building_cells
+            and failed_attempts < max_failed_attempts
+        ):
             # Try to add a rectangular extension
             if not self._add_rectangular_extension():
-                break
+                failed_attempts += 1
+            else:
+                failed_attempts = 0  # Reset on success
+
             current_cells = self._count_building_cells()
 
-        # Final cleanup to ensure smooth edges
+        # Final cleanup to ensure smooth edges while maintaining connectivity
         self._smooth_edges()
 
+        # Center the building shape
+        self._center_building()
+
         return self.grid
+
+    def _center_building(self):
+        """
+        Shift the building to the center of the grid.
+        """
+        building_cells = []
+        for r in range(self.grid.rows):
+            for c in range(self.grid.cols):
+                if self.grid.grid[r][c].is_building_cell:
+                    building_cells.append((r, c))
+
+        if not building_cells:
+            return
+
+        # Calculate bounding box
+        min_r = min(r for r, c in building_cells)
+        max_r = max(r for r, c in building_cells)
+        min_c = min(c for r, c in building_cells)
+        max_c = max(c for r, c in building_cells)
+
+        # Calculate centers
+        shape_center_r = (min_r + max_r) // 2
+        shape_center_c = (min_c + max_c) // 2
+
+        grid_center_r = self.grid.rows // 2
+        grid_center_c = self.grid.cols // 2
+
+        # Calculate offset
+        dr = grid_center_r - shape_center_r
+        dc = grid_center_c - shape_center_c
+
+        if dr == 0 and dc == 0:
+            return
+
+        # Clear grid
+        for r in range(self.grid.rows):
+            for c in range(self.grid.cols):
+                self.grid.grid[r][c].is_building_cell = False
+
+        # Apply offset
+        for r, c in building_cells:
+            new_r, new_c = r + dr, c + dc
+            if self.grid.is_valid_coord(new_r, new_c):
+                self.grid.grid[new_r][new_c].is_building_cell = True
 
     def _add_rectangular_extension(self):
         """
@@ -202,20 +258,36 @@ class BuildingShapeGenerator:
     def _try_extend_direction(self, r, c, direction):
         """
         Try to extend the building in a given direction with a rectangular block.
+        Only extends if the result remains connected and is reasonable in size.
         """
         # Determine the extension size (random between min_room_width and min_room_width * 2)
         extension_depth = random.randint(self.min_room_width, self.min_room_width * 2)
         extension_width = random.randint(self.min_room_width, self.min_room_width * 3)
 
         cells_to_add = []
+        cells_to_check = set()
 
         if direction == "up" or direction == "down":
             # Vertical extension
             dr = -1 if direction == "up" else 1
 
-            # Center the extension around the current column
-            start_c = max(0, c - extension_width // 2)
-            end_c = min(self.grid.cols, start_c + extension_width)
+            # Ensure the extension is anchored to existing building width
+            # Find the extent of building cells in this row
+            existing_cells = [
+                col
+                for col in range(self.grid.cols)
+                if self.grid.grid[r][col].is_building_cell
+            ]
+            if not existing_cells:
+                return False
+
+            # Keep extension within bounds of current building or slightly beyond
+            min_existing = min(existing_cells)
+            max_existing = max(existing_cells)
+            extent = max_existing - min_existing + 1
+
+            start_c = max(0, min_existing - 1)
+            end_c = min(self.grid.cols, max_existing + 2)
 
             # Check if we can extend
             for depth in range(1, extension_depth + 1):
@@ -229,14 +301,27 @@ class BuildingShapeGenerator:
                     if self.grid.grid[new_r][check_c].is_building_cell:
                         continue
                     cells_to_add.append((new_r, check_c))
+                    cells_to_check.add((new_r, check_c))
 
         elif direction == "left" or direction == "right":
             # Horizontal extension
             dc = -1 if direction == "left" else 1
 
-            # Center the extension around the current row
-            start_r = max(0, r - extension_width // 2)
-            end_r = min(self.grid.rows, start_r + extension_width)
+            # Find the extent of building cells in this column
+            existing_cells = [
+                row
+                for row in range(self.grid.rows)
+                if self.grid.grid[row][c].is_building_cell
+            ]
+            if not existing_cells:
+                return False
+
+            # Keep extension within bounds of current building
+            min_existing = min(existing_cells)
+            max_existing = max(existing_cells)
+
+            start_r = max(0, min_existing - 1)
+            end_r = min(self.grid.rows, max_existing + 2)
 
             # Check if we can extend
             for depth in range(1, extension_depth + 1):
@@ -250,18 +335,29 @@ class BuildingShapeGenerator:
                     if self.grid.grid[check_r][new_c].is_building_cell:
                         continue
                     cells_to_add.append((check_r, new_c))
+                    cells_to_check.add((check_r, new_c))
 
         # If we have valid cells to add and they form a reasonable extension
         if len(cells_to_add) >= self.min_room_width:
+            # Temporarily add cells
             for cell_r, cell_c in cells_to_add:
                 self.grid.grid[cell_r][cell_c].is_building_cell = True
-            return True
+
+            # Verify building remains connected
+            if self.is_connected():
+                return True
+            else:
+                # Rollback if it creates floating islands
+                for cell_r, cell_c in cells_to_add:
+                    self.grid.grid[cell_r][cell_c].is_building_cell = False
+                return False
 
         return False
 
     def _smooth_edges(self):
         """
         Remove jagged edges that are smaller than min_room_width.
+        Only removes protrusions that don't disconnect the building.
         """
         changed = True
         iterations = 0
@@ -271,23 +367,37 @@ class BuildingShapeGenerator:
             changed = False
             iterations += 1
 
-            # Check for vertical protrusions
-            for r in range(self.grid.rows):
-                for c in range(self.grid.cols):
-                    if self.grid.grid[r][c].is_building_cell:
-                        # Check if this is a vertical protrusion
-                        if self._is_vertical_protrusion(r, c):
-                            self.grid.grid[r][c].is_building_cell = False
-                            changed = True
+            cells_to_check = []
 
-            # Check for horizontal protrusions
+            # Collect all edge cells
             for r in range(self.grid.rows):
                 for c in range(self.grid.cols):
                     if self.grid.grid[r][c].is_building_cell:
-                        # Check if this is a horizontal protrusion
-                        if self._is_horizontal_protrusion(r, c):
-                            self.grid.grid[r][c].is_building_cell = False
-                            changed = True
+                        neighbors = self.grid.find_neighbors(r, c)
+                        if any(not n.is_building_cell for n in neighbors):
+                            cells_to_check.append((r, c))
+
+            # Try to remove protrusions
+            for r, c in cells_to_check:
+                if not self.grid.grid[r][c].is_building_cell:
+                    continue
+
+                remove_cell = False
+                # Check if this is a vertical protrusion
+                if self._is_vertical_protrusion(r, c):
+                    remove_cell = True
+                # Check if this is a horizontal protrusion
+                elif self._is_horizontal_protrusion(r, c):
+                    remove_cell = True
+
+                if remove_cell:
+                    # Temporarily remove and check connectivity
+                    self.grid.grid[r][c].is_building_cell = False
+                    if self.is_connected():
+                        changed = True
+                    else:
+                        # Restore if it disconnects the building
+                        self.grid.grid[r][c].is_building_cell = True
 
     def _is_vertical_protrusion(self, r, c):
         """
@@ -952,6 +1062,7 @@ class DoorWindowGenerator:
         self.min_room_width = min_room_width
         self.doors = []
         self.walls = []
+        self.placed_door_locations = set()  # Track all placed door cell locations
 
     def generate_doors(self):
         """
@@ -1170,6 +1281,8 @@ class DoorWindowGenerator:
     def _place_internal_doors(self):
         """
         Place doors between adjacent rooms on internal walls.
+        Only places doors on walls with sufficient length.
+        Prevents duplicate doors at the same location.
         """
         # Find all internal walls that are long enough for a door
         internal_walls = [
@@ -1179,7 +1292,7 @@ class DoorWindowGenerator:
         ]
 
         # For each pair of adjacent rooms, try to place a door
-        placed_doors = set()
+        placed_room_pairs = set()
 
         for wall in internal_walls:
             if wall.has_door:
@@ -1188,17 +1301,31 @@ class DoorWindowGenerator:
             # Find which rooms this wall separates
             room_pair = self._find_rooms_separated_by_wall(wall)
 
-            if room_pair and room_pair not in placed_doors:
+            if room_pair:
+                # Create a canonical room pair representation
+                room1_idx = self.rooms.index(room_pair[0])
+                room2_idx = self.rooms.index(room_pair[1])
+                pair_key = tuple(sorted([room1_idx, room2_idx]))
+
+                # Skip if we've already placed a door for this room pair
+                if pair_key in placed_room_pairs:
+                    continue
+
                 # Try to place a door on this wall
                 door_cells = self._find_door_position(wall)
 
                 if door_cells:
-                    door = Door(door_cells, room1=room_pair[0], room2=room_pair[1])
-                    self.doors.append(door)
-                    wall.has_door = True
-                    wall.door_cells = door_cells
-                    placed_doors.add(room_pair)
-                    placed_doors.add((room_pair[1], room_pair[0]))  # Add reverse pair
+                    # Check if door location is not already occupied
+                    door_location = tuple(sorted(door_cells))
+                    if door_location not in self.placed_door_locations:
+                        door = Door(door_cells, room1=room_pair[0], room2=room_pair[1])
+                        self.doors.append(door)
+                        wall.has_door = True
+                        wall.door_cells = door_cells
+                        placed_room_pairs.add(pair_key)
+                        # Record this door location
+                        for cell in door_cells:
+                            self.placed_door_locations.add(cell)
 
     def _find_rooms_separated_by_wall(self, wall):
         """
@@ -1255,7 +1382,8 @@ class DoorWindowGenerator:
     def _ensure_connectivity(self):
         """
         Ensure all rooms are connected via doors.
-        Uses Union-Find to check connectivity and adds doors where needed.
+        Uses BFS to check connectivity and adds doors where needed.
+        Only places doors on walls with sufficient size.
         """
         # Build a graph of room connections
         room_connections = {i: set() for i in range(len(self.rooms))}
@@ -1294,11 +1422,12 @@ class DoorWindowGenerator:
             comp1 = components[0]
             comp2 = components[1]
 
-            # Find the closest rooms between these components
+            # Find the best wall between these components
             best_wall = None
             best_distance = float("inf")
 
             for wall in self.walls:
+                # Only consider walls with sufficient size and no existing door
                 if wall.wall_type != "internal" or wall.has_door:
                     continue
                 if len(wall.cells) < self.door_size:
@@ -1315,9 +1444,9 @@ class DoorWindowGenerator:
                 if (idx1 in comp1 and idx2 in comp2) or (
                     idx1 in comp2 and idx2 in comp1
                 ):
-                    # Calculate "distance" (for now, just use wall length)
+                    # Prefer longer walls (better for door placement)
                     distance = len(wall.cells)
-                    if distance < best_distance:
+                    if distance > best_distance:
                         best_distance = distance
                         best_wall = wall
 
@@ -1327,51 +1456,74 @@ class DoorWindowGenerator:
                 room_pair = self._find_rooms_separated_by_wall(best_wall)
 
                 if door_cells and room_pair:
-                    door = Door(door_cells, room1=room_pair[0], room2=room_pair[1])
-                    self.doors.append(door)
-                    best_wall.has_door = True
-                    best_wall.door_cells = door_cells
+                    # Check if door location is not already occupied
+                    door_location = tuple(sorted(door_cells))
+                    if door_location not in self.placed_door_locations:
+                        door = Door(door_cells, room1=room_pair[0], room2=room_pair[1])
+                        self.doors.append(door)
+                        best_wall.has_door = True
+                        best_wall.door_cells = door_cells
+                        # Record this door location
+                        for cell in door_cells:
+                            self.placed_door_locations.add(cell)
 
-                    # Merge the components
-                    merged = comp1 | comp2
-                    components = [merged] + components[2:]
+                        # Merge the components
+                        merged = comp1 | comp2
+                        components = [merged] + components[2:]
+                    else:
+                        # Door location conflicts, can't connect
+                        break
+                else:
+                    # Can't place door, break to avoid infinite loop
+                    break
             else:
-                # Can't connect, break to avoid infinite loop
+                # Can't find suitable wall, break to avoid infinite loop
                 break
 
     def _place_entrance_door(self):
         """
         Place an entrance door on an external wall.
+        Only places doors on walls with sufficient length.
+        Avoids placing doors at locations already occupied.
         """
         # Find all external walls that are long enough
         external_walls = [
             w
             for w in self.walls
-            if w.wall_type == "external" and len(w.cells) >= self.door_size
+            if w.wall_type == "external"
+            and len(w.cells) >= self.door_size
+            and not w.has_door
         ]
 
         if not external_walls:
             return
 
-        # Prefer walls on the bottom or front of the building
-        # For now, just pick a random external wall
-        entrance_wall = random.choice(external_walls)
+        # Try each external wall until we find a valid placement
+        random.shuffle(external_walls)
+        for entrance_wall in external_walls:
+            door_cells = self._find_door_position(entrance_wall)
 
-        door_cells = self._find_door_position(entrance_wall)
+            if door_cells:
+                # Check if door location is not already occupied
+                door_location = tuple(sorted(door_cells))
+                if door_location not in self.placed_door_locations:
+                    # Find which room this entrance connects to
+                    sample_cell = door_cells[0]
+                    entrance_room = None
+                    for room in self.rooms:
+                        if sample_cell in room.cells:
+                            entrance_room = room
+                            break
 
-        if door_cells:
-            # Find which room this entrance connects to
-            sample_cell = door_cells[0]
-            entrance_room = None
-            for room in self.rooms:
-                if sample_cell in room.cells:
-                    entrance_room = room
-                    break
-
-            door = Door(door_cells, room1=entrance_room, is_entrance=True)
-            self.doors.append(door)
-            entrance_wall.has_door = True
-            entrance_wall.door_cells = door_cells
+                    if entrance_room:
+                        door = Door(door_cells, room1=entrance_room, is_entrance=True)
+                        self.doors.append(door)
+                        entrance_wall.has_door = True
+                        entrance_wall.door_cells = door_cells
+                        # Record this door location
+                        for cell in door_cells:
+                            self.placed_door_locations.add(cell)
+                        return  # Successfully placed entrance door
 
     def display_with_doors(self):
         """
@@ -1468,16 +1620,17 @@ class FloorPlanVisualizer:
         """Generate distinct pastel colors for each room."""
         # Predefined pastel colors (BGR format)
         base_colors = [
-            (230, 190, 255),  # Lavender
-            (255, 220, 190),  # Peach
-            (190, 255, 230),  # Mint
-            (255, 240, 190),  # Light yellow
-            (255, 190, 220),  # Pink
-            (190, 230, 255),  # Light blue
-            (220, 255, 190),  # Light green
-            (240, 190, 255),  # Light purple
-            (190, 255, 255),  # Cyan
-            (255, 210, 190),  # Coral
+            # (230, 190, 255),  # Lavender
+            # (255, 220, 190),  # Peach
+            # (190, 255, 230),  # Mint
+            # (255, 240, 190),  # Light yellow
+            # (255, 190, 220),  # Pink
+            # (190, 230, 255),  # Light blue
+            # (220, 255, 190),  # Light green
+            # (240, 190, 255),  # Light purple
+            # (190, 255, 255),  # Cyan
+            # (255, 210, 190),  # Coral
+            (255, 255, 255),  # White
         ]
 
         colors = []
