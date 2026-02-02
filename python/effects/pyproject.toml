@@ -1,0 +1,18 @@
+[project]
+name = "effects"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "ifs-bhdalk", email = "bhanuka.dassanayake@ifs.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=2.4.2",
+    "opencv-python>=4.13.0.90",
+    "opencv-python-headless>=4.13.0.90",
+]
+
+[build-system]
+requires = ["uv_build>=0.9.5,<0.10.0"]
+build-backend = "uv_build"
