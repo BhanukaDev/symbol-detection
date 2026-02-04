@@ -1,4 +1,4 @@
-from typing import Tuple, List, Any
+from typing import Tuple, List, Any, Optional, Dict
 from .models import Grid
 from .building_generator import BuildingShapeGenerator
 from .room_generator import RoomDivider
@@ -7,6 +7,13 @@ from .visualizer import FloorPlanVisualizer
 from .place_non_overlapping_rect_rooms import (
     place_non_overlapping_rect_rooms,
 )  # Keep existing
+from .symbol_placer import (
+    Symbol,
+    PlacedSymbol,
+    SymbolLoader,
+    SymbolPlacer,
+    generate_building_with_symbols,
+)
 
 
 def generate_building_grid(
@@ -91,4 +98,9 @@ __all__ = [
     "place_non_overlapping_rect_rooms",
     "generate_building_grid",
     "get_floor_image",
+    "generate_building_with_symbols",
+    "Symbol",
+    "PlacedSymbol",
+    "SymbolLoader",
+    "SymbolPlacer",
 ]
