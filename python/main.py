@@ -1,5 +1,6 @@
 import cv2
 import json
+import os
 from floor_grid import (
     generate_building_grid,
     get_floor_image,
@@ -16,42 +17,41 @@ def main():
     min_building_area_ratio = 0.6
     cell_size = 20
 
-    print("Generating building layout with symbols...")
+    # Dataset generation settings
+    num_images = 10  # Number of images to generate
+    output_dir = "dataset"
 
-    # Generate building with symbols
-    floor_plan_img, annotations, grid, rooms = generate_building_with_symbols(
-        rows=rows,
-        cols=cols,
-        cell_size=cell_size,
-        door_size=door_size,
-        min_room_width=min_room_width,
-        min_building_area_ratio=min_building_area_ratio,
-        symbols_dir="data/electrical-symbols",
-        symbols_per_room=(1, 4),  # 1 to 4 symbols per room
-        scale_range=(0.8, 1.5),  # Scale symbols between 80% and 150%
-        rotation_range=(0.0, 360.0),  # Random rotation between 0 and 360 degrees
-        show_labels=True,
-    )
+    # Create output directory if it doesn't exist
+    os.makedirs(output_dir, exist_ok=True)
 
-    print(f"Generated {len(rooms)} rooms with {len(annotations)} symbols placed.")
+    print(f"Generating {num_images} dataset images...")
 
-    # Print symbol placement info
-    for ann in annotations:
-        print(
-            f"  - {ann['class_name']} at ({ann['x']}, {ann['y']}) "
-            f"size: {ann['width']}x{ann['height']} (scale: {ann['scale']:.2f}, rot: {ann['rotation']:.1f}°)"
+    for i in range(num_images):
+        # Generate building with symbols
+        floor_plan_img, annotations, grid, rooms = generate_building_with_symbols(
+            rows=rows,
+            cols=cols,
+            cell_size=cell_size,
+            door_size=door_size,
+            min_room_width=min_room_width,
+            min_building_area_ratio=min_building_area_ratio,
+            symbols_dir="data/electrical-symbols",
+            symbols_per_room=(1, 4),  # 1 to 4 symbols per room
+            scale_range=(0.8, 1.5),  # Scale symbols between 80% and 150%
+            rotation_range=(0.0, 360.0),  # Random rotation between 0 and 360 degrees
+            show_labels=False,
         )
 
-    # Save the result
-    output_filename = "final_floor_plan_with_symbols.png"
-    cv2.imwrite(output_filename, floor_plan_img)
-    print(f"Floor plan with symbols saved to {output_filename}")
+        # Save the image
+        output_filename = os.path.join(output_dir, f"floor_plan_{i:04d}.png")
+        cv2.imwrite(output_filename, floor_plan_img)
+        print(
+            f"[{i+1}/{num_images}] Generated {output_filename} - {len(rooms)} rooms, {len(annotations)} symbols"
+        )
 
-    # Save annotations to JSON (useful for training)
-    annotations_filename = "symbol_annotations.json"
-    with open(annotations_filename, "w") as f:
-        json.dump(annotations, f, indent=2)
-    print(f"Annotations saved to {annotations_filename}")
+    print(
+        f"\nDataset generation complete! {num_images} images saved to '{output_dir}/'"
+    )
 
 
 def main_basic():
