@@ -32,8 +32,12 @@ class COCODetectionDataset(Dataset):
         
         self.image_ids = list(self.images.keys())
         
-        self.categories = {cat['id']: cat['name'] for cat in self.coco_data['categories']}
-        self.cat_id_to_idx = {cat['id']: idx for idx, cat in enumerate(self.coco_data['categories'])}
+        # Important: Sort categories to ensure consistent indexing across runs
+        sorted_categories = sorted(self.coco_data['categories'], key=lambda x: x['id'])
+        self.categories = {cat['id']: cat['name'] for cat in sorted_categories}
+        # Important: FasterRCNN expects 0 to be background.
+        # So we map our categories to 1-based indices.
+        self.cat_id_to_idx = {cat['id']: idx + 1 for idx, cat in enumerate(sorted_categories)}
 
     def __len__(self) -> int:
         return len(self.image_ids)
