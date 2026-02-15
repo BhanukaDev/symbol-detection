@@ -12,12 +12,18 @@ dependencies = [
     "numpy>=1.24",
     "opencv-python>=4.8",
     "Pillow>=10.0",
+    "torch>=2.0",
+    "torchvision>=0.15",
+    "pycocotools>=2.0",
+    "timm>=0.9",
+    "torchmetrics>=0.13",
     "effects",
     "floor-grid",
 ]
 
 [project.scripts]
 generate-dataset = "symbol_detection.dataset.cli:main"
+train-model = "symbol_detection.training.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
