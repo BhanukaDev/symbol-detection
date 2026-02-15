@@ -204,7 +204,9 @@ class SymbolDetectionPredictor:
         """
         with torch.no_grad():
             tensor, metadata = self.preprocess(image)
-            predictions = self.model([tensor])[0]
+            # tensor has shape [1, C, H, W], squeeze to [C, H, W] for model input
+            tensor_3d = tensor.squeeze(0)
+            predictions = self.model([tensor_3d])[0]
             detections = self.postprocess(predictions, metadata, conf_threshold)
         
         return detections
