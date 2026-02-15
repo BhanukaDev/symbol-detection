@@ -72,17 +72,27 @@ class SymbolDetectionPredictor:
         return model
 
     def _load_categories(self, categories_file: Optional[str | Path]) -> Dict[int, str]:
-        """Load category names from COCO format JSON."""
+        """Load category names from COCO format JSON.
+        
+        Maps 0-based indices (used by model) to category names.
+        Index 0 is always background, indices 1+ map to COCO categories in order.
+        """
         if categories_file is None:
-            return {i: f"Symbol_{i}" for i in range(self.num_classes)}
+            return {0: "Background", **{i: f"Symbol_{i}" for i in range(1, self.num_classes)}}
         
         try:
             with open(categories_file, 'r') as f:
                 data = json.load(f)
-            return {cat['id']: cat['name'] for cat in data['categories']}
+            
+            # Create 0-based index mapping (same as training: enumerate categories)
+            categories = {0: "Background"}
+            for idx, cat in enumerate(data['categories'], start=1):
+                categories[idx] = cat['name']
+            
+            return categories
         except Exception as e:
             print(f"⚠ Could not load categories: {e}")
-            return {i: f"Symbol_{i}" for i in range(self.num_classes)}
+            return {0: "Background", **{i: f"Symbol_{i}" for i in range(1, self.num_classes)}}
 
     def preprocess(
         self,
