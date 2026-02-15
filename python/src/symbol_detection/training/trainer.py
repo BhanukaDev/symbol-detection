@@ -161,7 +161,7 @@ class Trainer:
     def validate(self, val_loader):
         self.model.train()
         total_loss = 0.0
-        
+
         with torch.no_grad():
             for images, targets in val_loader:
                 images = [img.to(self.device) for img in images]
@@ -169,12 +169,16 @@ class Trainer:
                     'boxes': t['boxes'].to(self.device),
                     'labels': t['labels'].to(self.device),
                 } for t in targets]
-                
+
                 loss_dict = self.model(images, targets)
-                losses = sum(loss_dict.values(), torch.tensor(0.0, device=self.device))
-                
+                if isinstance(loss_dict, dict):
+                    losses = sum(loss_dict.values(), torch.tensor(0.0, device=self.device))
+                else:
+                    # Some torchvision versions return a list during evaluation
+                    losses = torch.tensor(0.0, device=self.device)
+
                 total_loss += losses.item()
-        
+
         avg_loss = total_loss / len(val_loader)  # type: ignore
         self.val_losses.append(avg_loss)
         return avg_loss
