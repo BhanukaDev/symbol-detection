@@ -9,3 +9,7 @@ wheels/
 
 # Virtual environments
 .venv
+# Generated dataset
+dataset/
+visualized/
+test_viz/
