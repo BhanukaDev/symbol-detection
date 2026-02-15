@@ -1,22 +1,38 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
-name = "python"
+name = "symbol-detection"
 version = "0.1.0"
-description = "Add your description here"
+description = "Electrical symbol detection in floor plans using COCO dataset"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "numpy>=1.24",
+    "opencv-python>=4.8",
+    "Pillow>=10.0",
     "effects",
     "floor-grid",
-    "matplotlib>=3.10.8",
-    "Pillow>=11.0.0",
 ]
+
+[project.scripts]
+generate-dataset = "symbol_detection.dataset.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+symbol_detection = ["py.typed"]
 
 [tool.uv.workspace]
 members = [
-    "effects",
     "floor-grid",
+    "effects",
 ]
 
 [tool.uv.sources]
 effects = { workspace = true }
 floor-grid = { workspace = true }
+
+

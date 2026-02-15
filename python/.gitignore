@@ -5,11 +5,25 @@ build/
 dist/
 wheels/
 *.egg-info
-
+*.egg
+.eggs/
 
 # Virtual environments
-.venv
-# Generated dataset
-dataset/
-visualized/
-test_viz/
+.venv/
+.env
+
+# Generated dataset outputs (ignore only the output folder with images/annotations)
+/dataset/
+/visualized/
+/test_viz/
+
+# IDE/Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
