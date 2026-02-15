@@ -33,7 +33,11 @@ class COCODetectionDataset(Dataset):
         self.image_ids = list(self.images.keys())
         
         self.categories = {cat['id']: cat['name'] for cat in self.coco_data['categories']}
-        self.cat_id_to_idx = {cat['id']: idx for idx, cat in enumerate(self.coco_data['categories'])}
+        # FIX (2024): Map category IDs to 1-based indices (0 is reserved for background in FasterRCNN)
+        # Previous bug: Used idx directly (0-6), which conflicted with background class (0)
+        # Now: Using idx + 1 (1-7) ensures proper alignment with FasterRCNN's expected format
+        # This ensures model learns correct associations between features and class labels
+        self.cat_id_to_idx = {cat['id']: idx + 1 for idx, cat in enumerate(self.coco_data['categories'])}
 
     def __len__(self) -> int:
         return len(self.image_ids)
