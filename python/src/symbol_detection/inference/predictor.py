@@ -58,7 +58,14 @@ class SymbolDetectionPredictor:
         )
         
         checkpoint = torch.load(self.checkpoint_path, map_location=self.device)
-        model.load_state_dict(checkpoint)
+        
+        # Handle checkpoint format: extract model_state_dict if it's wrapped
+        if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+            state_dict = checkpoint['model_state_dict']
+        else:
+            state_dict = checkpoint
+        
+        model.load_state_dict(state_dict)
         
         model.to(self.device)
         model.eval()
