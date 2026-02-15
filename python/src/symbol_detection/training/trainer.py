@@ -63,6 +63,7 @@ class Trainer:
         self.train_losses = []
         self.val_losses = []
         self.ap_history = []
+        self.start_epoch = 0
 
     def _build_model(self):
         model = fasterrcnn_resnet50_fpn(
@@ -232,12 +233,17 @@ class Trainer:
         train_size = len(train_loader.dataset)  # type: ignore
         val_size = len(val_loader.dataset)  # type: ignore
         
-        print(f"Training for {self.num_epochs} epochs...")
+        if self.start_epoch >= self.num_epochs:
+            print(f"Already trained for {self.start_epoch} epochs. Target is {self.num_epochs}.")
+            print("Increase num_epochs to continue training.")
+            return
+
+        print(f"Training for {self.num_epochs} epochs (starting from epoch {self.start_epoch + 1})...")
         print(f"Training samples: {train_size}, Validation samples: {val_size}")
         if self.enable_ap_eval:
             print(f"AP evaluation every {self.eval_every_n} epochs\n")
         
-        for epoch in range(self.num_epochs):
+        for epoch in range(self.start_epoch, self.num_epochs):
             train_loss = self.train_epoch(train_loader)
             val_loss = self.validate(val_loader)
             
@@ -261,6 +267,8 @@ class Trainer:
             
             if (epoch + 1) % 10 == 0:
                 self.save_checkpoint(epoch + 1)
+        
+        # Final evaluation logic remains same...
         
         # Final evaluation
         if self.enable_ap_eval:
@@ -298,9 +306,24 @@ class Trainer:
             json.dump(metrics, f, indent=2)
         print(f"Saved metrics: {metrics_path}")
 
-    def load_checkpoint(self, checkpoint_path: str | Path):
+    def load_checkpoint(self, checkpoint_path: str | Path, resume_training: bool = False):
         checkpoint = torch.load(checkpoint_path, map_location=self.device)
         self.model.load_state_dict(checkpoint['model_state_dict'])
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        
+        if resume_training:
+            self.start_epoch = checkpoint.get('epoch', 0)
+            if isinstance(self.start_epoch, str): # Handle 'final' case
+                 self.start_epoch = 0
+            
+            # Try to load metric history if available
+            metrics_path = self.output_dir / 'metrics.json'
+            if metrics_path.exists():
+                with open(metrics_path, 'r') as f:
+                    metrics = json.load(f)
+                    self.train_losses = metrics.get('train_losses', [])
+                    self.val_losses = metrics.get('val_losses', [])
+                    self.ap_history = metrics.get('ap_history', [])
+            
         print(f"Loaded checkpoint: {checkpoint_path}")
         return checkpoint
