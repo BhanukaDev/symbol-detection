@@ -474,7 +474,7 @@ class SymbolPlacer:
                 return water_wave_distortion(img, amplitude=amplitude, frequency=frequency)
             
             elif effect_type == "twirl" and twirl_distortion:
-                angle = random.uniform(0.5, 2.0)
+                angle = random.uniform(0.2, 0.6)
                 radius = int(min(img.shape[:2]) // 2)
                 return twirl_distortion(img, angle=angle, radius=radius)
         except Exception as e:

@@ -7,6 +7,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 from torchvision.models.detection import fasterrcnn_resnet50_fpn
 from torchvision.models.detection.backbone_utils import resnet_fpn_backbone
+from torchmetrics.detection import MeanAveragePrecision
 
 from symbol_detection.training.data import COCODetectionDataset, collate_fn
 from symbol_detection.training.losses import CIoULoss
@@ -23,7 +24,8 @@ class Trainer:
         num_epochs: int = 50,
         device: Optional[str] = None,
         use_ciou_loss: bool = True,
-        start_epoch: int = 0,
+        eval_every_n: int = 10,
+        enable_ap_eval: bool = True,
     ):
         self.dataset_dir = Path(dataset_dir)
         self.output_dir = Path(output_dir)
@@ -34,7 +36,8 @@ class Trainer:
         self.learning_rate = learning_rate
         self.num_epochs = num_epochs
         self.use_ciou_loss = use_ciou_loss
-        self.start_epoch = start_epoch
+        self.eval_every_n = eval_every_n
+        self.enable_ap_eval = enable_ap_eval
         
         if device is None:
             self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -56,6 +59,7 @@ class Trainer:
         
         self.train_losses = []
         self.val_losses = []
+        self.ap_history = []
 
     def _build_model(self):
         model = fasterrcnn_resnet50_fpn(
@@ -161,7 +165,7 @@ class Trainer:
     def validate(self, val_loader):
         self.model.train()
         total_loss = 0.0
-
+        
         with torch.no_grad():
             for images, targets in val_loader:
                 images = [img.to(self.device) for img in images]
@@ -169,19 +173,55 @@ class Trainer:
                     'boxes': t['boxes'].to(self.device),
                     'labels': t['labels'].to(self.device),
                 } for t in targets]
-
+                
                 loss_dict = self.model(images, targets)
-                if isinstance(loss_dict, dict):
-                    losses = sum(loss_dict.values(), torch.tensor(0.0, device=self.device))
-                else:
-                    # Some torchvision versions return a list during evaluation
-                    losses = torch.tensor(0.0, device=self.device)
-
+                losses = sum(loss_dict.values(), torch.tensor(0.0, device=self.device))
+                
                 total_loss += losses.item()
-
+        
         avg_loss = total_loss / len(val_loader)  # type: ignore
         self.val_losses.append(avg_loss)
         return avg_loss
+
+    def evaluate_ap(self, val_loader):
+        """Compute COCO-style Average Precision metrics (mAP, AP50, AP75)."""
+        self.model.eval()
+        metric = MeanAveragePrecision(iou_type='bbox')
+        
+        with torch.no_grad():
+            for images, targets in val_loader:
+                images = [img.to(self.device) for img in images]
+                targets = [{
+                    'boxes': t['boxes'].to(self.device),
+                    'labels': t['labels'].to(self.device),
+                } for t in targets]
+                
+                # Get predictions
+                predictions = self.model(images)
+                
+                # Format for torchmetrics (needs CPU tensors)
+                preds = [{
+                    'boxes': p['boxes'].cpu(),
+                    'scores': p['scores'].cpu(),
+                    'labels': p['labels'].cpu(),
+                } for p in predictions]
+                
+                gts = [{
+                    'boxes': t['boxes'].cpu(),
+                    'labels': t['labels'].cpu(),
+                } for t in targets]
+                
+                metric.update(preds, gts)
+        
+        # Compute metrics
+        results = metric.compute()
+        
+        return {
+            'mAP': results['map'].item(),  # Mean AP across IoU 0.5:0.95
+            'AP50': results['map_50'].item(),  # AP at IoU=0.5
+            'AP75': results['map_75'].item(),  # AP at IoU=0.75
+            'mAR': results['mar_100'].item(),  # Mean Average Recall
+        }
 
     def train(self):
         train_loader, val_loader = self.get_dataloaders()
@@ -189,20 +229,46 @@ class Trainer:
         train_size = len(train_loader.dataset)  # type: ignore
         val_size = len(val_loader.dataset)  # type: ignore
         
-        print(f"Training for {self.num_epochs} epochs (starting from epoch {self.start_epoch})...")
+        print(f"Training for {self.num_epochs} epochs...")
         print(f"Training samples: {train_size}, Validation samples: {val_size}")
+        if self.enable_ap_eval:
+            print(f"AP evaluation every {self.eval_every_n} epochs\n")
         
-        for epoch in range(self.start_epoch, self.num_epochs):
+        for epoch in range(self.num_epochs):
             train_loss = self.train_epoch(train_loader)
             val_loss = self.validate(val_loader)
             
             self.scheduler.step()
             
             print(f"Epoch {epoch+1}/{self.num_epochs} - "
-                  f"Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
+                  f"Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}", end='')
+            
+            # Periodic AP evaluation
+            if self.enable_ap_eval and (epoch + 1) % self.eval_every_n == 0:
+                print("\n  Evaluating AP metrics...", end=' ')
+                ap_results = self.evaluate_ap(val_loader)
+                self.ap_history.append({
+                    'epoch': epoch + 1,
+                    **ap_results
+                })
+                print(f"mAP: {ap_results['mAP']:.3f}, AP50: {ap_results['AP50']:.3f}, "
+                      f"AP75: {ap_results['AP75']:.3f}, mAR: {ap_results['mAR']:.3f}")
+            else:
+                print()  # Newline
             
             if (epoch + 1) % 10 == 0:
                 self.save_checkpoint(epoch + 1)
+        
+        # Final evaluation
+        if self.enable_ap_eval:
+            print("\nFinal evaluation...")
+            final_ap = self.evaluate_ap(val_loader)
+            self.ap_history.append({
+                'epoch': 'final',
+                **final_ap
+            })
+            print(f"Final - mAP: {final_ap['mAP']:.3f}, AP50: {final_ap['AP50']:.3f}, "
+                  f"AP75: {final_ap['AP75']:.3f}, mAR: {final_ap['mAR']:.3f}")
         
         self.save_checkpoint('final')
         self.save_metrics()
@@ -222,6 +288,7 @@ class Trainer:
         metrics = {
             'train_losses': self.train_losses,
             'val_losses': self.val_losses,
+            'ap_history': self.ap_history,
         }
         metrics_path = self.output_dir / 'metrics.json'
         with open(metrics_path, 'w') as f:
