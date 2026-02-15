@@ -24,6 +24,7 @@ dependencies = [
 [project.scripts]
 generate-dataset = "symbol_detection.dataset.cli:main"
 train-model = "symbol_detection.training.cli:main"
+run-inference = "symbol_detection.inference.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
