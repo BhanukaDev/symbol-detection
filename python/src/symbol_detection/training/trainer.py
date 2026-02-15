@@ -157,7 +157,7 @@ class Trainer:
         return avg_loss
 
     def validate(self, val_loader):
-        self.model.eval()
+        self.model.train()
         total_loss = 0.0
         
         with torch.no_grad():
