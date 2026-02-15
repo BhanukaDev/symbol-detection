@@ -12,13 +12,11 @@ def main():
     num_images = 10
     output_dir = "dataset"
 
-    # Building parameters
-    rows = 80
-    cols = 120
-    door_size = 2
-    min_room_width = 8
-    min_building_area_ratio = 0.6
-    cell_size = 20
+    # Building parameters with variation ranges
+    # Can use tuples (min, max) for random variation or single int for fixed value
+    rows = (10, 60)       # Vary rows between 10-60
+    cols = (10, 60)       # Vary cols between 10-60
+    cell_size = (15, 25)  # Vary pixel density (cell size) between 15-25 pixels
 
     # Generate COCO format dataset
     coco_data = generate_coco_dataset(
@@ -28,13 +26,15 @@ def main():
         rows=rows,
         cols=cols,
         cell_size=cell_size,
-        door_size=door_size,
-        min_room_width=min_room_width,
-        min_building_area_ratio=min_building_area_ratio,
+        door_size=2,
+        min_room_width=8,
+        min_building_area_ratio=0.6,
         symbols_per_room=(1, 4),
         scale_range=(0.8, 1.5),
         rotation_range=(0.0, 360.0),
         show_labels=False,
+        apply_symbol_effects=True,   # Apply water waves and twirl to symbols
+        apply_image_effects=True,    # Apply noise, brightness, color changes
     )
 
     # Print summary
