@@ -74,8 +74,10 @@ class SymbolDetectionPredictor:
     def _load_categories(self, categories_file: Optional[str | Path]) -> Dict[int, str]:
         """Load category names from COCO format JSON.
         
-        Maps 0-based indices (used by model) to category names.
-        Index 0 is always background, indices 1+ map to COCO categories in order.
+        Maps 0-based indices to category names using the same logic as training:
+        Category position in JSON list → index (0-based with background at 0).
+        
+        This ensures inference mapping matches training data loader mapping.
         """
         if categories_file is None:
             return {0: "Background", **{i: f"Symbol_{i}" for i in range(1, self.num_classes)}}
@@ -84,10 +86,12 @@ class SymbolDetectionPredictor:
             with open(categories_file, 'r') as f:
                 data = json.load(f)
             
-            # Create 0-based index mapping (same as training: enumerate categories)
+            # Match training's mapping: position in JSON → 0-based index
+            # Background is always at index 0
+            # Categories follow in the order they appear in JSON at indices 1+
             categories = {0: "Background"}
-            for idx, cat in enumerate(data['categories'], start=1):
-                categories[idx] = cat['name']
+            for idx, cat in enumerate(data['categories']):
+                categories[idx + 1] = cat['name']
             
             return categories
         except Exception as e:

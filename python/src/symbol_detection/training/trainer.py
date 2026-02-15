@@ -23,6 +23,7 @@ class Trainer:
         num_epochs: int = 50,
         device: Optional[str] = None,
         use_ciou_loss: bool = True,
+        start_epoch: int = 0,
     ):
         self.dataset_dir = Path(dataset_dir)
         self.output_dir = Path(output_dir)
@@ -33,6 +34,7 @@ class Trainer:
         self.learning_rate = learning_rate
         self.num_epochs = num_epochs
         self.use_ciou_loss = use_ciou_loss
+        self.start_epoch = start_epoch
         
         if device is None:
             self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -183,10 +185,10 @@ class Trainer:
         train_size = len(train_loader.dataset)  # type: ignore
         val_size = len(val_loader.dataset)  # type: ignore
         
-        print(f"Training for {self.num_epochs} epochs...")
+        print(f"Training for {self.num_epochs} epochs (starting from epoch {self.start_epoch})...")
         print(f"Training samples: {train_size}, Validation samples: {val_size}")
         
-        for epoch in range(self.num_epochs):
+        for epoch in range(self.start_epoch, self.num_epochs):
             train_loss = self.train_epoch(train_loader)
             val_loss = self.validate(val_loader)
             
