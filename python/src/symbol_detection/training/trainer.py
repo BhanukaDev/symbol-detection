@@ -7,7 +7,10 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 from torchvision.models.detection import fasterrcnn_resnet50_fpn
 from torchvision.models.detection.backbone_utils import resnet_fpn_backbone
-from torchmetrics.detection import MeanAveragePrecision
+try:
+    from torchmetrics.detection import MeanAveragePrecision
+except ImportError:
+    from torchmetrics.detection.mean_ap import MeanAveragePrecision
 
 from symbol_detection.training.data import COCODetectionDataset, collate_fn
 from symbol_detection.training.losses import CIoULoss
