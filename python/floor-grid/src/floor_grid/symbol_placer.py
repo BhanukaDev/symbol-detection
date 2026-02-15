@@ -14,6 +14,12 @@ from typing import List, Tuple, Dict, Optional, Set
 from dataclasses import dataclass
 from .models import Grid, Room
 
+try:
+    from effects import water_wave_distortion, twirl_distortion
+except ImportError:
+    water_wave_distortion = None
+    twirl_distortion = None
+
 
 @dataclass
 class Symbol:
@@ -124,6 +130,7 @@ class SymbolPlacer:
         cell_size: int = 20,
         wall_thickness: int = 8,
         symbol_padding: int = 5,
+        apply_symbol_effects: bool = True,
     ):
         """
         Initialize the symbol placer.
@@ -134,12 +141,14 @@ class SymbolPlacer:
             cell_size: Size of each cell in pixels.
             wall_thickness: Thickness of walls in pixels.
             symbol_padding: Minimum padding between symbols and walls/other symbols.
+            apply_symbol_effects: Whether to apply distortion effects to symbols.
         """
         self.grid = grid
         self.rooms = rooms
         self.cell_size = cell_size
         self.wall_thickness = wall_thickness
         self.symbol_padding = symbol_padding
+        self.apply_symbol_effects = apply_symbol_effects
         self.placed_symbols: List[PlacedSymbol] = []
 
         # Calculate image dimensions
@@ -446,6 +455,33 @@ class SymbolPlacer:
 
         return self.placed_symbols
 
+    def _apply_symbol_effects(self, img: np.ndarray) -> np.ndarray:
+        """
+        Apply distortion effects to a symbol image.
+
+        Args:
+            img: Input image (symbol).
+
+        Returns:
+            Processed image with effects applied.
+        """
+        effect_type = random.choice(["water_wave", "twirl", "none"])
+        
+        try:
+            if effect_type == "water_wave" and water_wave_distortion:
+                amplitude = int(random.uniform(0.5, 2.0))
+                frequency = random.uniform(0.01, 0.03)
+                return water_wave_distortion(img, amplitude=amplitude, frequency=frequency)
+            
+            elif effect_type == "twirl" and twirl_distortion:
+                angle = random.uniform(0.5, 2.0)
+                radius = int(min(img.shape[:2]) // 2)
+                return twirl_distortion(img, angle=angle, radius=radius)
+        except Exception as e:
+            print(f"Warning: Symbol effect application failed: {e}")
+        
+        return img
+
     def render_symbols_on_image(
         self,
         floor_plan_img: np.ndarray,
@@ -480,6 +516,10 @@ class SymbolPlacer:
                 (scaled_width, scaled_height),
                 interpolation=cv2.INTER_AREA if scale < 1 else cv2.INTER_LINEAR,
             )
+
+            # Apply symbol effects if enabled
+            if self.apply_symbol_effects:
+                scaled_img = self._apply_symbol_effects(scaled_img)
 
             # Apply rotation
             rotated_img = self._rotate_image(scaled_img, rotation)
@@ -581,6 +621,7 @@ def generate_building_with_symbols(
     rotation_range: Tuple[float, float] = (0.0, 360.0),
     symbol_classes: Optional[List[str]] = None,
     show_labels: bool = False,
+    apply_symbol_effects: bool = True,
 ) -> Tuple[np.ndarray, List[Dict], Grid, List[Room]]:
     """
     Generate a complete building with symbols placed inside.
@@ -598,6 +639,7 @@ def generate_building_with_symbols(
         rotation_range: (min, max) rotation angle range in degrees.
         symbol_classes: List of symbol classes to use, or None for all.
         show_labels: Whether to show room labels on the image.
+        apply_symbol_effects: Whether to apply distortion effects to symbols.
 
     Returns:
         Tuple of (image, annotations, grid, rooms)
@@ -631,6 +673,7 @@ def generate_building_with_symbols(
         grid=grid,
         rooms=rooms,
         cell_size=cell_size,
+        apply_symbol_effects=apply_symbol_effects,
     )
 
     placer.place_symbols_randomly(
