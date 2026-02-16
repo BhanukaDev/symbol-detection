@@ -36,7 +36,6 @@ def apply_gradient_fade(
         x, y = np.meshgrid(np.arange(w), np.arange(h))
         
         # Rotate coordinates
-        # Distance from center projected onto the vector defined by angle
         dist = (x - cx) * np.cos(angle) + (y - cy) * np.sin(angle)
         
         # Normalize to 0-1 range
