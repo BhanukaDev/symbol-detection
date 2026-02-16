@@ -24,13 +24,14 @@ except ImportError:
 
 @dataclass
 class Symbol:
-    """Represents an electrical symbol."""
+    """Represents an electrical symbol or furniture object."""
 
     name: str
     image: np.ndarray
     width: int
     height: int
     variant_path: str  # path to source image file
+    is_distractor: bool = False  # If True, this symbol is not annotated
 
 
 @dataclass
@@ -48,7 +49,7 @@ class PlacedSymbol:
 class SymbolLoader:
     """Loads electrical symbols from a directory structure."""
 
-    def __init__(self, symbols_dir: str):
+    def __init__(self, symbols_dir: str, distractor_dir: Optional[str] = None):
         """
         Initialize the symbol loader.
 
@@ -56,10 +57,15 @@ class SymbolLoader:
             symbols_dir: Path to the directory containing symbol folders.
                          Each subfolder represents a symbol class and contains
                          variant images (PNG files).
+            distractor_dir: Optional path to directory containing furniture/other non-symbols.
         """
         self.symbols_dir = Path(symbols_dir)
+        self.distractor_dir = Path(distractor_dir) if distractor_dir else None
         self.symbol_classes: Dict[str, List[Symbol]] = {}
+        self.distractor_classes: Dict[str, List[Symbol]] = {}
         self._load_symbols()
+        if self.distractor_dir:
+            self._load_distractors()
 
     def _load_symbols(self):
         """Load all symbols from the directory structure."""
@@ -81,12 +87,43 @@ class SymbolLoader:
                             width=img.shape[1],
                             height=img.shape[0],
                             variant_path=str(img_file),
+                            is_distractor=False,
                         )
                         self.symbol_classes[symbol_name].append(symbol)
 
         print(f"Loaded {len(self.symbol_classes)} symbol classes:")
         for name, variants in self.symbol_classes.items():
             print(f"  - {name}: {len(variants)} variant(s)")
+
+    def _load_distractors(self):
+        """Load all distractors (furniture) which are not annotated."""
+        if not self.distractor_dir or not self.distractor_dir.exists():
+            return
+
+        for folder in self.distractor_dir.iterdir():
+            if folder.is_dir():
+                name = folder.name
+                self.distractor_classes[name] = []
+                # Support multiple image formats
+                extensions = ["*.png", "*.jpg", "*.jpeg"]
+                image_files = []
+                for ext in extensions:
+                    image_files.extend(folder.glob(ext))
+                
+                for img_file in image_files:
+                    img = cv2.imread(str(img_file), cv2.IMREAD_UNCHANGED)
+                    if img is not None:
+                        symbol = Symbol(
+                            name=name,
+                            image=img,
+                            width=img.shape[1],
+                            height=img.shape[0],
+                            variant_path=str(img_file),
+                            is_distractor=True,
+                        )
+                        self.distractor_classes[name].append(symbol)
+        
+        print(f"Loaded {len(self.distractor_classes)} distractor classes (Furniture).")
 
     def get_random_symbol(self, symbol_class: Optional[str] = None) -> Optional[Symbol]:
         """
@@ -114,6 +151,16 @@ class SymbolLoader:
 
         if all_symbols:
             return random.choice(all_symbols)
+        return None
+
+    def get_random_distractor(self) -> Optional[Symbol]:
+        """Get a random furniture item/distractor (unannotated)."""
+        all_distractors = []
+        for variants in self.distractor_classes.values():
+            all_distractors.extend(variants)
+        
+        if all_distractors:
+            return random.choice(all_distractors)
         return None
 
     def get_all_symbol_classes(self) -> List[str]:
@@ -151,6 +198,7 @@ class SymbolPlacer:
         self.symbol_padding = symbol_padding
         self.apply_symbol_effects = apply_symbol_effects
         self.placed_symbols: List[PlacedSymbol] = []
+        self.placed_distractors: List[PlacedSymbol] = []
 
         # Calculate image dimensions
         self.img_width = grid.cols * cell_size
@@ -391,8 +439,9 @@ class SymbolPlacer:
                 continue
 
             # Check for overlap with existing symbols
+            existing_obstacles = self.placed_symbols + self.placed_distractors
             if not self._check_overlap(
-                x, y, bbox_width, bbox_height, self.placed_symbols
+                x, y, bbox_width, bbox_height, existing_obstacles
             ):
                 placed = PlacedSymbol(
                     symbol=symbol,
@@ -402,7 +451,10 @@ class SymbolPlacer:
                     scale=scale,
                     rotation=rotation,
                 )
-                self.placed_symbols.append(placed)
+                if symbol.is_distractor:
+                    self.placed_distractors.append(placed)
+                else:
+                    self.placed_symbols.append(placed)
                 return placed
 
         return None
@@ -414,19 +466,18 @@ class SymbolPlacer:
         scale_range: Tuple[float, float] = (0.8, 1.5),
         rotation_range: Tuple[float, float] = (0.0, 360.0),
         symbol_classes: Optional[List[str]] = None,
+        num_distractors_per_room: Tuple[int, int] = (0, 2),
     ) -> List[PlacedSymbol]:
         """
-        Place random symbols in all rooms.
+        Place random symbols and distractors in all rooms.
 
         Args:
-            symbol_loader: SymbolLoader instance with loaded symbols.
-            symbols_per_room: (min, max) number of symbols to place per room.
-            scale_range: (min, max) scale factor range for symbols.
-            rotation_range: (min, max) rotation angle range in degrees.
-            symbol_classes: List of symbol classes to use, or None for all.
-
-        Returns:
-            List of all successfully placed symbols.
+            symbol_loader: SymbolLoader instance.
+            symbols_per_room: Range of electrical symbols to place.
+            scale_range: Scale range.
+            rotation_range: Rotation range.
+            symbol_classes: List of allowed symbol classes.
+            num_distractors_per_room: Range of furniture items to place (not annotated).
         """
         available_classes = symbol_classes or symbol_loader.get_all_symbol_classes()
 
@@ -435,12 +486,25 @@ class SymbolPlacer:
             if room.get_area() < 4:
                 continue
 
+            # 1. Place Furniture/Distractors First (Background)
+            # They are larger and should be placed before small symbols to avoid collision issues
+            num_furn = random.randint(num_distractors_per_room[0], num_distractors_per_room[1])
+            for _ in range(num_furn):
+                distractor = symbol_loader.get_random_distractor()
+                if distractor:
+                    # Furniture is usually larger, maybe scale it up slightly?
+                    # Or keep same scale range.
+                    scale = random.uniform(scale_range[0], scale_range[1]) * 1.2 
+                    rotation = random.uniform(0, 360) # Furniture can be rotated
+                    self.place_symbol_in_room(distractor, room_idx, scale, rotation)
+
+            # 2. Place Electrical Symbols (Foreground/Important)
             num_symbols = random.randint(symbols_per_room[0], symbols_per_room[1])
 
             for _ in range(num_symbols):
                 # Get a random symbol
                 symbol_class = random.choice(available_classes)
-                symbol = symbol_loader.get_random_symbol(symbol_class)
+                symbol = symbol_loader.get_random_distractor() if False else symbol_loader.get_random_symbol(symbol_class)
 
                 if symbol is None:
                     continue
@@ -511,7 +575,8 @@ class SymbolPlacer:
         use_alpha: bool = True,
     ) -> np.ndarray:
         """
-        Render all placed symbols onto the floor plan image.
+        Render all placed symbols and distractors onto the floor plan image.
+        Distractors are rendered first so they appear "below" electrical symbols.
 
         Args:
             floor_plan_img: The floor plan image to draw on.
@@ -522,7 +587,10 @@ class SymbolPlacer:
         """
         result = floor_plan_img.copy()
 
-        for placed in self.placed_symbols:
+        # Render distractors (furniture) first, then electrical symbols
+        all_items = self.placed_distractors + self.placed_symbols
+
+        for placed in all_items:
             symbol = placed.symbol
             scale = placed.scale
             rotation = placed.rotation
@@ -541,6 +609,8 @@ class SymbolPlacer:
             )
 
             # Apply symbol effects if enabled
+            # Note: We might want different effects for distractors? 
+            # For now applying same effects (fading/distortion) is good for realism
             if self.apply_symbol_effects:
                 scaled_img = self._apply_symbol_effects(scaled_img)
 
@@ -548,45 +618,65 @@ class SymbolPlacer:
             rotated_img = self._rotate_image(scaled_img, rotation)
             rot_height, rot_width = rotated_img.shape[:2]
 
-            x, y = placed.x, placed.y
+            x, y = placed.x, placed.y # Top-left coordinates
 
-            # Ensure we don't go out of bounds
-            x_end = min(x + rot_width, result.shape[1])
-            y_end = min(y + rot_height, result.shape[0])
+            # Calculate where to place it on the canvas
+            x_start = x
+            y_start = y
+            x_end = x + rot_width
+            y_end = y + rot_height
 
-            if x >= result.shape[1] or y >= result.shape[0]:
+            # Clipping checks
+            if x_start >= result.shape[1] or y_start >= result.shape[0]:
+                continue
+            
+            # Handle negative start coordinates (cropping top/left)
+            img_x_start = 0
+            img_y_start = 0
+            if x_start < 0:
+                img_x_start = -x_start
+                x_start = 0
+            if y_start < 0:
+                img_y_start = -y_start
+                y_start = 0
+
+            # Handle end coordinates (cropping bottom/right)
+            x_end = min(x_end, result.shape[1])
+            y_end = min(y_end, result.shape[0])
+            
+            # Dimensions to copy
+            copy_w = x_end - x_start
+            copy_h = y_end - y_start
+
+            if copy_w <= 0 or copy_h <= 0:
                 continue
 
-            # Crop symbol if it would go out of bounds
-            symbol_x_end = x_end - x
-            symbol_y_end = y_end - y
+            # Crop the rotated symbol image
+            rotated_img_cropped = rotated_img[img_y_start:img_y_start+copy_h, img_x_start:img_x_start+copy_w]
 
-            if symbol_x_end <= 0 or symbol_y_end <= 0:
-                continue
-
-            # Handle alpha channel if present
-            if use_alpha and rotated_img.shape[2] == 4:
+            # Handle alpha channel
+            if use_alpha and rotated_img_cropped.shape[2] == 4:
                 # Extract alpha channel
-                alpha = rotated_img[:symbol_y_end, :symbol_x_end, 3] / 255.0
+                alpha = rotated_img_cropped[:, :, 3] / 255.0
                 alpha = alpha[:, :, np.newaxis]
 
                 # Extract RGB channels
-                symbol_rgb = rotated_img[:symbol_y_end, :symbol_x_end, :3]
+                symbol_rgb = rotated_img_cropped[:, :, :3]
 
                 # Get the region of interest from the result
-                roi = result[y:y_end, x:x_end]
+                roi = result[y_start:y_end, x_start:x_end]
 
                 # Blend using alpha
                 blended = (symbol_rgb * alpha + roi * (1 - alpha)).astype(np.uint8)
-                result[y:y_end, x:x_end] = blended
+                result[y_start:y_end, x_start:x_end] = blended
             else:
-                # No alpha, just copy (handle both 3 and 4 channel images)
-                if rotated_img.shape[2] == 4:
-                    symbol_rgb = rotated_img[:symbol_y_end, :symbol_x_end, :3]
+                # No alpha, just copy RGB
+                if rotated_img_cropped.shape[2] == 4:
+                    symbol_rgb = rotated_img_cropped[:, :, :3]
                 else:
-                    symbol_rgb = rotated_img[:symbol_y_end, :symbol_x_end]
-
-                result[y:y_end, x:x_end] = symbol_rgb
+                    symbol_rgb = rotated_img_cropped
+                
+                result[y_start:y_end, x_start:x_end] = symbol_rgb
 
         return result
 
@@ -639,7 +729,9 @@ def generate_building_with_symbols(
     min_room_width: int = 8,
     min_building_area_ratio: float = 0.6,
     symbols_dir: str = "data/electrical-symbols",
+    distractor_dir: Optional[str] = None,
     symbols_per_room: Tuple[int, int] = (1, 5),
+    num_distractors_per_room: Tuple[int, int] = (0, 2),
     scale_range: Tuple[float, float] = (0.8, 1.5),
     rotation_range: Tuple[float, float] = (0.0, 360.0),
     symbol_classes: Optional[List[str]] = None,
@@ -647,7 +739,7 @@ def generate_building_with_symbols(
     apply_symbol_effects: bool = True,
 ) -> Tuple[np.ndarray, List[Dict], Grid, List[Room]]:
     """
-    Generate a complete building with symbols placed inside.
+    Generate a complete building with symbols and distractors placed inside.
 
     Args:
         rows: Number of rows in the grid.
@@ -657,7 +749,9 @@ def generate_building_with_symbols(
         min_room_width: Minimum width of a room in cells.
         min_building_area_ratio: Target ratio of building area to total grid area.
         symbols_dir: Path to the directory containing symbol images.
+        distractor_dir: Path to directory containing furniture images (optional).
         symbols_per_room: (min, max) number of symbols per room.
+        num_distractors_per_room: (min, max) number of distractors per room.
         scale_range: (min, max) scale factor range for symbols.
         rotation_range: (min, max) rotation angle range in degrees.
         symbol_classes: List of symbol classes to use, or None for all.
@@ -689,7 +783,7 @@ def generate_building_with_symbols(
     )
 
     # Load symbols
-    symbol_loader = SymbolLoader(symbols_dir)
+    symbol_loader = SymbolLoader(symbols_dir, distractor_dir=distractor_dir)
 
     # Create symbol placer and place symbols
     placer = SymbolPlacer(
@@ -702,6 +796,7 @@ def generate_building_with_symbols(
     placer.place_symbols_randomly(
         symbol_loader=symbol_loader,
         symbols_per_room=symbols_per_room,
+        num_distractors_per_room=num_distractors_per_room,
         scale_range=scale_range,
         rotation_range=rotation_range,
         symbol_classes=symbol_classes,

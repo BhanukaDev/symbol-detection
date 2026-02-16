@@ -1,7 +1,7 @@
 """Dataset generation CLI"""
 import argparse
 from symbol_detection.dataset.generator import generate_coco_dataset
-from symbol_detection.config import DATASET_SETTINGS, SYMBOLS_DIR
+from symbol_detection.config import DATASET_SETTINGS, SYMBOLS_DIR, DISTRACTOR_DIR
 
 
 def main():
@@ -13,6 +13,7 @@ def main():
         default=DATASET_SETTINGS["num_images"],
         help="Number of images to generate",
     )
+    # ... (existing args)
     parser.add_argument(
         "--rows-min",
         type=int,
@@ -56,6 +57,24 @@ def main():
         help="Output directory for dataset",
     )
     parser.add_argument(
+        "--distractor-dir",
+        type=str,
+        default=str(DISTRACTOR_DIR),
+        help="Directory containing distractor images (furniture)",
+    )
+    parser.add_argument(
+        "--num-distractors-min",
+        type=int,
+        default=0,
+        help="Minimum number of distractors per room",
+    )
+    parser.add_argument(
+        "--num-distractors-max",
+        type=int,
+        default=3,
+        help="Maximum number of distractors per room",
+    )
+    parser.add_argument(
         "--no-symbol-effects",
         action="store_true",
         help="Disable symbol effects (water waves, twirl)",
@@ -72,6 +91,7 @@ def main():
     coco_data = generate_coco_dataset(
         output_dir=args.output_dir,
         symbols_dir=str(SYMBOLS_DIR),
+        distractor_dir=args.distractor_dir,
         num_images=args.num_images,
         rows=(args.rows_min, args.rows_max),
         cols=(args.cols_min, args.cols_max),
@@ -80,6 +100,7 @@ def main():
         min_room_width=8,
         min_building_area_ratio=0.6,
         symbols_per_room=(1, 4),
+        num_distractors_per_room=(args.num_distractors_min, args.num_distractors_max),
         scale_range=(0.8, 1.5),
         rotation_range=(0.0, 360.0),
         show_labels=False,

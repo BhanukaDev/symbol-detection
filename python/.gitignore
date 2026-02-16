@@ -1,4 +1,4 @@
-# Python-generated files
+﻿# Python-generated files
 __pycache__/
 *.py[oc]
 build/
@@ -16,6 +16,8 @@ wheels/
 /dataset/
 /visualized/
 /test_viz/
+/checkpoints/
+/detections/
 
 # IDE/Editor
 .vscode/

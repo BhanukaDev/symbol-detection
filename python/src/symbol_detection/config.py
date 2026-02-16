@@ -7,6 +7,7 @@ DATA_DIR = PROJECT_ROOT / "data"
 DATASET_DIR = PROJECT_ROOT / "dataset"
 MODELS_DIR = PROJECT_ROOT / "models"
 SYMBOLS_DIR = DATA_DIR / "electrical-symbols"
+DISTRACTOR_DIR = DATA_DIR / "furnitures-and-other"
 
 # Dataset settings
 DATASET_SETTINGS = {

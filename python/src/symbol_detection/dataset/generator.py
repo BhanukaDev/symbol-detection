@@ -18,16 +18,18 @@ from floor_grid import generate_building_with_symbols
 class COCODatasetGenerator:
     """Generates floor plan dataset with COCO format annotations."""
 
-    def __init__(self, output_dir: str = "dataset", symbols_dir: str = "data/electrical-symbols"):
+    def __init__(self, output_dir: str = "dataset", symbols_dir: str = "data/electrical-symbols", distractor_dir: Optional[str] = None):
         """
         Initialize the dataset generator.
 
         Args:
             output_dir: Directory where images and annotations will be saved.
             symbols_dir: Directory containing electrical symbol images.
+            distractor_dir: Directory containing furniture/distractor images.
         """
         self.output_dir = Path(output_dir)
         self.symbols_dir = symbols_dir
+        self.distractor_dir = distractor_dir
         self.images_dir = self.output_dir / "images"
         self.annotations_file = self.output_dir / "annotations.json"
         
@@ -167,6 +169,7 @@ class COCODatasetGenerator:
         min_room_width: int = 8,
         min_building_area_ratio: float = 0.6,
         symbols_per_room: Tuple[int, int] = (1, 4),
+        num_distractors_per_room: Tuple[int, int] = (0, 2),
         scale_range: Tuple[float, float] = (0.8, 1.5),
         rotation_range: Tuple[float, float] = (0.0, 360.0),
         symbol_classes: Optional[List[str]] = None,
@@ -186,6 +189,7 @@ class COCODatasetGenerator:
             min_room_width: Minimum width of a room in cells.
             min_building_area_ratio: Target ratio of building area to total grid area.
             symbols_per_room: (min, max) number of symbols per room.
+            num_distractors_per_room: (min, max) number of furniture items per room.
             scale_range: (min, max) scale factor range for symbols.
             rotation_range: (min, max) rotation angle range in degrees.
             symbol_classes: List of symbol classes to use, or None for all.
@@ -219,6 +223,7 @@ class COCODatasetGenerator:
         print(f"  - Cell size range: {cell_size[0]} to {cell_size[1]} pixels")
         print(f"  - Symbol effects: {'enabled' if apply_symbol_effects else 'disabled'}")
         print(f"  - Image effects: {'enabled' if apply_image_effects else 'disabled'}")
+        print(f"  - Distractors/Furniture: {num_distractors_per_room} per room")
 
         for i in range(num_images):
             image_id = i + 1
@@ -237,7 +242,9 @@ class COCODatasetGenerator:
                 min_room_width=min_room_width,
                 min_building_area_ratio=min_building_area_ratio,
                 symbols_dir=self.symbols_dir,
+                distractor_dir=self.distractor_dir,
                 symbols_per_room=symbols_per_room,
+                num_distractors_per_room=num_distractors_per_room,
                 scale_range=scale_range,
                 rotation_range=rotation_range,
                 symbol_classes=symbol_classes,
@@ -300,6 +307,7 @@ class COCODatasetGenerator:
 def generate_coco_dataset(
     output_dir: str = "dataset",
     symbols_dir: str = "data/electrical-symbols",
+    distractor_dir: str = "data/furnitures-and-other",
     num_images: int = 10,
     **kwargs
 ) -> Dict:
@@ -309,13 +317,18 @@ def generate_coco_dataset(
     Args:
         output_dir: Directory where images and annotations will be saved.
         symbols_dir: Directory containing electrical symbol images.
+        distractor_dir: Directory containing furniture/distractor images.
         num_images: Number of images to generate.
         **kwargs: Additional parameters passed to generate_dataset().
 
     Returns:
         Dictionary with COCO format data.
     """
-    generator = COCODatasetGenerator(output_dir=output_dir, symbols_dir=symbols_dir)
+    generator = COCODatasetGenerator(
+        output_dir=output_dir,
+        symbols_dir=symbols_dir,
+        distractor_dir=distractor_dir
+    )
     coco_data = generator.generate_dataset(num_images=num_images, **kwargs)
     generator.save_annotations()
     return coco_data
