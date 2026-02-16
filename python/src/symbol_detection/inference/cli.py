@@ -15,6 +15,7 @@ def main():
     parser.add_argument('--output', type=str, default='detections', help='Output directory for results')
     parser.add_argument('--conf-threshold', type=float, default=0.50, help='Confidence threshold')
     parser.add_argument('--categories', type=str, default=None, help='Path to categories JSON')
+    parser.add_argument('--num-classes', type=int, default=8, help='Number of classes (including background)')
     parser.add_argument('--save-vis', action='store_true', help='Save visualized results')
     
     args = parser.parse_args()
@@ -26,6 +27,7 @@ def main():
     # Initialize predictor
     predictor = SymbolDetectionPredictor(
         checkpoint_path=args.checkpoint,
+        num_classes=args.num_classes,
         categories_file=args.categories,
         confidence_threshold=args.conf_threshold,
     )

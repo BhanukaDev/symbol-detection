@@ -15,10 +15,11 @@ from dataclasses import dataclass
 from .models import Grid, Room
 
 try:
-    from effects import water_wave_distortion, twirl_distortion
+    from effects import water_wave_distortion, twirl_distortion, apply_gradient_fade
 except ImportError:
     water_wave_distortion = None
     twirl_distortion = None
+    apply_gradient_fade = None
 
 
 @dataclass
@@ -465,25 +466,44 @@ class SymbolPlacer:
         Returns:
             Processed image with effects applied.
         """
-        effect_type = random.choice(["water_wave", "twirl", "none"])
+        result = img.copy()
         
-        try:
-            if effect_type == "water_wave" and water_wave_distortion:
-                # Extremely subtle distortion (barely visible wiggle)
-                amplitude = int(random.uniform(0.5, 1.5))
-                frequency = random.uniform(0, 0.03)
-                return water_wave_distortion(img, amplitude=amplitude, frequency=frequency)
+        # 1. Geometric Distortion (Shape)
+        # Apply gentle geometric distortion with 50% chance
+        if random.random() < 0.5:
+            # Pick a geometric effect
+            if random.random() < 0.5:
+                geom_type = "water_wave"
+            else:
+                geom_type = "twirl"
             
-            elif effect_type == "twirl" and twirl_distortion:
-                # Very slight twist
-                # angle = random.uniform(0, 0.02)
-                # radius = int(min(img.shape[:2]) // 2)
-                # return twirl_distortion(img, angle=angle, radius=radius)
-                return img  
-        except Exception as e:
-            print(f"Warning: Symbol effect application failed: {e}")
+            try:
+                if geom_type == "water_wave" and water_wave_distortion:
+                    # Extremely subtle distortion (barely visible wiggle)
+                    amplitude = int(random.uniform(0.5, 0.8))
+                    frequency = random.uniform(0.005, 0.015)
+                    result = water_wave_distortion(result, amplitude=amplitude, frequency=frequency)
+                
+                elif geom_type == "twirl" and twirl_distortion:
+                    # Very slight twist
+                    angle = random.uniform(0.02, 0.1)
+                    radius = int(min(result.shape[:2]) // 2)
+                    result = twirl_distortion(result, angle=angle, radius=radius)
+            except Exception as e:
+                pass # Ignore geometric errors
+
+        # 2. Visual Degradation (Fading/Ink)
+        # Apply fading effect with 40% chance
+        if random.random() < 0.4 and apply_gradient_fade:
+            try:
+                # Randomize fade intensity (keep it legible)
+                # min_alpha affects how transparent the faded parts get
+                min_alpha = random.uniform(0.3, 0.6)
+                result = apply_gradient_fade(result, min_alpha=min_alpha, max_alpha=1.0)
+            except Exception as e:
+                print(f"Warning: Fade effect failed: {e}")
         
-        return img
+        return result
 
     def render_symbols_on_image(
         self,
