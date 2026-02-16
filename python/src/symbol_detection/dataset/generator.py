@@ -14,12 +14,6 @@ from typing import Dict, List, Tuple, Optional, Union
 from pathlib import Path
 from floor_grid import generate_building_with_symbols
 
-try:
-    from effects import water_wave_distortion, twirl_distortion
-except ImportError:
-    water_wave_distortion = None
-    twirl_distortion = None
-
 
 class COCODatasetGenerator:
     """Generates floor plan dataset with COCO format annotations."""
@@ -48,35 +42,6 @@ class COCODatasetGenerator:
         self.category_name_to_id: Dict[str, int] = {}
         self.next_category_id = 1
         self.next_annotation_id = 1
-
-    def _apply_symbol_effects(self, img: np.ndarray, effect_type: str = "random") -> np.ndarray:
-        """
-        Apply distortion effects to a symbol image.
-
-        Args:
-            img: Input image (symbol).
-            effect_type: Type of effect ("water_wave", "twirl", or "random").
-
-        Returns:
-            Processed image with effects applied.
-        """
-        if effect_type == "random":
-            effect_type = random.choice(["water_wave", "twirl", "none"])
-        
-        try:
-            if effect_type == "water_wave" and water_wave_distortion:
-                amplitude = int(random.uniform(0.5, 2.0))
-                frequency = random.uniform(0.01, 0.03)
-                return water_wave_distortion(img, amplitude=amplitude, frequency=frequency)
-            
-            elif effect_type == "twirl" and twirl_distortion:
-                angle = random.uniform(0.2, 0.6)
-                radius = int(min(img.shape[:2]) // 2)
-                return twirl_distortion(img, angle=angle, radius=radius)
-        except Exception as e:
-            print(f"Warning: Effect application failed: {e}")
-        
-        return img
 
     def _apply_image_effects(self, img: np.ndarray) -> np.ndarray:
         """

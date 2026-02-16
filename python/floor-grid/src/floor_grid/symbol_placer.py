@@ -469,14 +469,17 @@ class SymbolPlacer:
         
         try:
             if effect_type == "water_wave" and water_wave_distortion:
-                amplitude = int(random.uniform(0.5, 2.0))
-                frequency = random.uniform(0.01, 0.03)
+                # Extremely subtle distortion (barely visible wiggle)
+                amplitude = int(random.uniform(0.5, 1.5))
+                frequency = random.uniform(0, 0.03)
                 return water_wave_distortion(img, amplitude=amplitude, frequency=frequency)
             
             elif effect_type == "twirl" and twirl_distortion:
-                angle = random.uniform(0.2, 0.6)
-                radius = int(min(img.shape[:2]) // 2)
-                return twirl_distortion(img, angle=angle, radius=radius)
+                # Very slight twist
+                # angle = random.uniform(0, 0.02)
+                # radius = int(min(img.shape[:2]) // 2)
+                # return twirl_distortion(img, angle=angle, radius=radius)
+                return img  
         except Exception as e:
             print(f"Warning: Symbol effect application failed: {e}")
         
