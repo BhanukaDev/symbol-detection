@@ -244,11 +244,14 @@ class Trainer:
             print(f"AP evaluation every {self.eval_every_n} epochs\n")
         
         for epoch in range(self.start_epoch, self.num_epochs):
+            print(f"Epoch {epoch+1}/{self.num_epochs} [Training...]", end='\r', flush=True)
+            
             train_loss = self.train_epoch(train_loader)
             val_loss = self.validate(val_loader)
             
             self.scheduler.step()
             
+            # Clear line and print result
             print(f"Epoch {epoch+1}/{self.num_epochs} - "
                   f"Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}", end='')
             
