@@ -84,6 +84,11 @@ def main():
         action="store_true",
         help="Disable image effects (noise, brightness, color)",
     )
+    parser.add_argument(
+        "--apply-lighting-effects",
+        action="store_true",
+        help="Apply realistic lighting effects (tint, low light)",
+    )
 
     args = parser.parse_args()
 
@@ -106,6 +111,7 @@ def main():
         show_labels=False,
         apply_symbol_effects=not args.no_symbol_effects,
         apply_image_effects=not args.no_image_effects,
+        apply_lighting_effects=args.apply_lighting_effects,
     )
 
     # Print summary

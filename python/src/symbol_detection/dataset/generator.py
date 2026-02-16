@@ -94,6 +94,59 @@ class COCODatasetGenerator:
         
         return result
 
+    def _apply_lighting_effects(self, img: np.ndarray) -> np.ndarray:
+        """
+        Apply realistic lighting effects (warm/cool tint, low light shadows).
+        Simulates phone camera captures in varying conditions.
+        """
+        result = img.copy().astype(np.float32)
+        
+        # 1. Color Temperature (Tint)
+        # Apply random white balance shift
+        if random.random() < 0.7:  # 70% chance of tint
+            if random.random() < 0.6:
+                # Warm tint (Indoor/Incandescent) - Yellowish
+                # Boost Red/Green, lower Blue
+                b_gain = random.uniform(0.8, 0.95)
+                g_gain = random.uniform(0.95, 1.05)
+                r_gain = random.uniform(1.0, 1.1)
+            else:
+                # Cool tint (Fluorescent/Shadow) - Bluish
+                # Boost Blue, lower Red
+                b_gain = random.uniform(1.0, 1.15)
+                g_gain = random.uniform(0.95, 1.05)
+                r_gain = random.uniform(0.85, 0.95)
+                
+            result[:, :, 0] *= b_gain # Blue
+            result[:, :, 1] *= g_gain # Green
+            result[:, :, 2] *= r_gain # Red
+
+        # 2. Low Light / Uneven Lighting (Vignetting & Darkness)
+        if random.random() < 0.4:
+            # Simulate low light by darkening
+            darkness_factor = random.uniform(0.6, 0.9)
+            result *= darkness_factor
+            
+            # Add significant sensor noise for low light path
+            noise_sigma = random.uniform(10, 25)
+            noise = np.random.normal(0, noise_sigma, result.shape)
+            result += noise
+
+            # Apply Vignetting (mask corners)
+            rows, cols = result.shape[:2]
+            # Generate vignetting mask
+            kernel_x = cv2.getGaussianKernel(cols, cols/2)
+            kernel_y = cv2.getGaussianKernel(rows, rows/2)
+            kernel = kernel_y * kernel_x.T
+            mask = kernel / kernel.max()
+            
+            # Apply mask to each channel
+            for i in range(3):
+                result[:, :, i] = result[:, :, i] * mask
+
+        # Clip back to valid range
+        return np.clip(result, 0, 255).astype(np.uint8)
+
     def _get_or_create_category_id(self, category_name: str) -> int:
         """
         Get existing category ID or create a new one.
@@ -176,6 +229,7 @@ class COCODatasetGenerator:
         show_labels: bool = False,
         apply_symbol_effects: bool = True,
         apply_image_effects: bool = True,
+        apply_lighting_effects: bool = False,
     ) -> Dict:
         """
         Generate a complete dataset with COCO format annotations.
@@ -196,6 +250,7 @@ class COCODatasetGenerator:
             show_labels: Whether to show room labels on the images.
             apply_symbol_effects: Whether to apply distortion effects to symbols.
             apply_image_effects: Whether to apply noise/color effects to images.
+            apply_lighting_effects: Whether to apply realistic lighting (tint, low light).
 
         Returns:
             Dictionary with COCO format data.
@@ -223,6 +278,7 @@ class COCODatasetGenerator:
         print(f"  - Cell size range: {cell_size[0]} to {cell_size[1]} pixels")
         print(f"  - Symbol effects: {'enabled' if apply_symbol_effects else 'disabled'}")
         print(f"  - Image effects: {'enabled' if apply_image_effects else 'disabled'}")
+        print(f"  - Lighting effects: {'enabled' if apply_lighting_effects else 'disabled'}")
         print(f"  - Distractors/Furniture: {num_distractors_per_room} per room")
 
         for i in range(num_images):
@@ -251,6 +307,10 @@ class COCODatasetGenerator:
                 show_labels=show_labels,
                 apply_symbol_effects=apply_symbol_effects,
             )
+
+            # Apply lighting effects (tint, low light) - Apply BEFORE general image effects
+            if apply_lighting_effects:
+                floor_plan_img = self._apply_lighting_effects(floor_plan_img)
 
             # Apply image effects (noise, brightness, contrast, color shifts)
             if apply_image_effects:
