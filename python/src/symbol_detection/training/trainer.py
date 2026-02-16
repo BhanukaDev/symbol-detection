@@ -47,6 +47,10 @@ class Trainer:
         else:
             self.device = device
         print(f"Using device: {self.device}")
+
+        # Enable cuDNN autotune for faster convolutions after warmup
+        if torch.cuda.is_available():
+            torch.backends.cudnn.benchmark = True
         
         self.model = self._build_model()
         self.optimizer = optim.SGD(
@@ -129,14 +133,14 @@ class Trainer:
             batch_size=self.batch_size,
             shuffle=True,
             collate_fn=collate_fn,
-            num_workers=0,
+            num_workers=2,
         )
         val_loader = DataLoader(
             val_dataset,
             batch_size=self.batch_size,
             shuffle=False,
             collate_fn=collate_fn,
-            num_workers=0,
+            num_workers=2,
         )
         
         return train_loader, val_loader
