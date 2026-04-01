@@ -269,8 +269,18 @@ class COCODatasetGenerator:
         if isinstance(cell_size, int):
             cell_size = (cell_size, cell_size)
         
-        # Create output directories
+        # Clean existing data and recreate output directories
+        if self.images_dir.exists():
+            import shutil
+            shutil.rmtree(self.images_dir)
+            print("✓ Cleared existing images directory")
         self.images_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Reset annotation state for fresh generation
+        self.coco_data = {"images": [], "annotations": [], "categories": []}
+        self.category_name_to_id = {}
+        self.next_category_id = 1
+        self.next_annotation_id = 1
 
         print(f"Generating {num_images} dataset images with varied dimensions...")
         print(f"  - Rows range: {rows[0]} to {rows[1]}")

@@ -14,10 +14,12 @@ class COCODetectionDataset(Dataset):
         coco_json_path: str | Path,
         images_dir: str | Path,
         transform=None,
+        max_size: int = 800,
     ):
         self.coco_json_path = Path(coco_json_path)
         self.images_dir = Path(images_dir)
         self.transform = transform
+        self.max_size = max_size
         
         with open(self.coco_json_path, 'r') as f:
             self.coco_data = json.load(f)
@@ -80,6 +82,16 @@ class COCODetectionDataset(Dataset):
         if self.transform:
             image = self.transform(image)
         else:
+            # Resize if image exceeds max_size (preserving aspect ratio)
+            h, w = image.shape[:2]
+            if max(h, w) > self.max_size:
+                scale = self.max_size / max(h, w)
+                new_w, new_h = int(w * scale), int(h * scale)
+                image = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
+                if len(boxes) > 0:
+                    boxes[:, [0, 2]] *= scale
+                    boxes[:, [1, 3]] *= scale
+                    areas = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
             image = torch.from_numpy(image).permute(2, 0, 1).float() / 255.0
         
         target = {
