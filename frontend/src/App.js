@@ -16,64 +16,12 @@ import {
   CardMedia,
   Chip,
   Stack,
+  Snackbar,
+  Alert,
 } from "@mui/material";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import ElectricalServicesIcon from "@mui/icons-material/ElectricalServices";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-
-const getMockupBOQ = () => {
-  return [
-    {
-      id: 1,
-      symbol: "Light",
-      description: "Ceiling Light Fixture",
-      quantity: Math.floor(Math.random() * 10) + 5,
-      unit: "nos",
-    },
-    {
-      id: 2,
-      symbol: "Duplex Receptacle",
-      description: "Double Outlet Socket",
-      quantity: Math.floor(Math.random() * 15) + 8,
-      unit: "nos",
-    },
-    {
-      id: 3,
-      symbol: "Single-pole, one-way switch",
-      description: "Single Switch",
-      quantity: Math.floor(Math.random() * 8) + 3,
-      unit: "nos",
-    },
-    {
-      id: 4,
-      symbol: "Two-pole, one-way switch",
-      description: "Double Switch",
-      quantity: Math.floor(Math.random() * 5) + 2,
-      unit: "nos",
-    },
-    {
-      id: 5,
-      symbol: "Three-pole, one-way switch",
-      description: "Triple Switch",
-      quantity: Math.floor(Math.random() * 3) + 1,
-      unit: "nos",
-    },
-    {
-      id: 6,
-      symbol: "Two-way switch",
-      description: "Two-way Switch",
-      quantity: Math.floor(Math.random() * 4) + 2,
-      unit: "nos",
-    },
-    {
-      id: 7,
-      symbol: "Junction Box",
-      description: "Electrical Junction Box",
-      quantity: Math.floor(Math.random() * 6) + 3,
-      unit: "nos",
-    },
-  ];
-};
 
 const COLORS = {
   "Light": "#FF6B6B",
@@ -93,6 +41,7 @@ function App() {
   const [boqData, setBoqData] = useState(null);
   const [detections, setDetections] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const canvasRef = useRef(null);
   const imgRef = useRef(null);
 
@@ -171,9 +120,7 @@ function App() {
       setDetections(data.detections || []);
     } catch (err) {
       console.error("Detection failed:", err);
-      // Fallback to mock data during development
-      const mockData = getMockupBOQ();
-      setBoqData(mockData);
+      setError(`Detection failed: ${err.message}. Please try again.`);
     } finally {
       setLoading(false);
     }
@@ -429,6 +376,17 @@ function App() {
           </Paper>
         )}
       </Container>
+      {/* Error Toast */}
+      <Snackbar
+        open={!!error}
+        autoHideDuration={6000}
+        onClose={() => setError(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert onClose={() => setError(null)} severity="error" variant="filled">
+          {error}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }
