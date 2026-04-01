@@ -1,0 +1,11 @@
+{
+  "categories": [
+    {"id": 1, "name": "Two-way switch"},
+    {"id": 2, "name": "Three-pole, one-way switch"},
+    {"id": 3, "name": "Junction Box"},
+    {"id": 4, "name": "Duplex Receptacle"},
+    {"id": 5, "name": "Single-pole, one-way switch"},
+    {"id": 6, "name": "Two-pole, one-way switch"},
+    {"id": 7, "name": "Light"}
+  ]
+}
