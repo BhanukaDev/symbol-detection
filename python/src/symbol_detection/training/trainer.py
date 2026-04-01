@@ -122,10 +122,12 @@ class Trainer:
         train_dataset = COCODetectionDataset(
             coco_json_path=train_json,
             images_dir=self.dataset_dir / 'images',
+            augment=True,
         )
         val_dataset = COCODetectionDataset(
             coco_json_path=val_json,
             images_dir=self.dataset_dir / 'images',
+            augment=False,
         )
         
         train_loader = DataLoader(

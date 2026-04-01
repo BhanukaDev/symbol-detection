@@ -462,11 +462,12 @@ class SymbolPlacer:
     def place_symbols_randomly(
         self,
         symbol_loader: SymbolLoader,
-        symbols_per_room: Tuple[int, int] = (1, 5),
-        scale_range: Tuple[float, float] = (0.8, 1.5),
+        symbols_per_room: Tuple[int, int] = (0, 3),
+        scale_range: Tuple[float, float] = (0.8, 1.2),
         rotation_range: Tuple[float, float] = (0.0, 360.0),
+        discrete_rotations: Optional[List[float]] = None,
         symbol_classes: Optional[List[str]] = None,
-        num_distractors_per_room: Tuple[int, int] = (0, 2),
+        num_distractors_per_room: Tuple[int, int] = (0, 1),
     ) -> List[PlacedSymbol]:
         """
         Place random symbols and distractors in all rooms.
@@ -512,8 +513,11 @@ class SymbolPlacer:
                 # Random scale
                 scale = random.uniform(scale_range[0], scale_range[1])
 
-                # Random rotation
-                rotation = random.uniform(rotation_range[0], rotation_range[1])
+                # Rotation: discrete snapping (e.g. 0/90/180/270) or continuous
+                if discrete_rotations:
+                    rotation = random.choice(discrete_rotations)
+                else:
+                    rotation = random.uniform(rotation_range[0], rotation_range[1])
 
                 # Try to place it
                 self.place_symbol_in_room(symbol, room_idx, scale, rotation)
@@ -730,13 +734,14 @@ def generate_building_with_symbols(
     min_building_area_ratio: float = 0.6,
     symbols_dir: str = "data/electrical-symbols",
     distractor_dir: Optional[str] = None,
-    symbols_per_room: Tuple[int, int] = (1, 5),
-    num_distractors_per_room: Tuple[int, int] = (0, 2),
-    scale_range: Tuple[float, float] = (0.8, 1.5),
+    symbols_per_room: Tuple[int, int] = (0, 3),
+    num_distractors_per_room: Tuple[int, int] = (0, 1),
+    scale_range: Tuple[float, float] = (0.8, 1.2),
     rotation_range: Tuple[float, float] = (0.0, 360.0),
+    discrete_rotations: Optional[List[float]] = None,
     symbol_classes: Optional[List[str]] = None,
     show_labels: bool = False,
-    apply_symbol_effects: bool = True,
+    apply_symbol_effects: bool = False,
 ) -> Tuple[np.ndarray, List[Dict], Grid, List[Room]]:
     """
     Generate a complete building with symbols and distractors placed inside.
@@ -799,6 +804,7 @@ def generate_building_with_symbols(
         num_distractors_per_room=num_distractors_per_room,
         scale_range=scale_range,
         rotation_range=rotation_range,
+        discrete_rotations=discrete_rotations,
         symbol_classes=symbol_classes,
     )
 

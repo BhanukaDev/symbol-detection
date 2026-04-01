@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import {
   Container,
   Typography,
@@ -75,18 +75,77 @@ const getMockupBOQ = () => {
   ];
 };
 
+const COLORS = {
+  "Light": "#FF6B6B",
+  "Duplex Receptacle": "#4ECDC4",
+  "Single-pole, one-way switch": "#45B7D1",
+  "Two-pole, one-way switch": "#96CEB4",
+  "Three-pole, one-way switch": "#FFEAA7",
+  "Two-way switch": "#DDA0DD",
+  "Junction Box": "#FF8C42",
+};
+
+const API_URL = process.env.REACT_APP_API_URL || "https://sirbhanus-symbol-detection.hf.space";
+
 function App() {
   const [selectedImage, setSelectedImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [boqData, setBoqData] = useState(null);
+  const [detections, setDetections] = useState([]);
   const [loading, setLoading] = useState(false);
+  const canvasRef = useRef(null);
+  const imgRef = useRef(null);
+
+  const drawDetections = useCallback(() => {
+    const canvas = canvasRef.current;
+    const img = imgRef.current;
+    if (!canvas || !img || !detections.length) return;
+
+    const rect = img.getBoundingClientRect();
+    canvas.width = rect.width;
+    canvas.height = rect.height;
+
+    const scaleX = rect.width / img.naturalWidth;
+    const scaleY = rect.height / img.naturalHeight;
+
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    detections.forEach((det) => {
+      const [x1, y1, x2, y2] = det.bbox;
+      const sx = x1 * scaleX;
+      const sy = y1 * scaleY;
+      const sw = (x2 - x1) * scaleX;
+      const sh = (y2 - y1) * scaleY;
+      const color = COLORS[det.class_name] || "#00FF00";
+
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(sx, sy, sw, sh);
+
+      const label = `${det.class_name} ${(det.confidence * 100).toFixed(0)}%`;
+      ctx.font = "bold 12px Arial";
+      const textWidth = ctx.measureText(label).width;
+      ctx.fillStyle = color;
+      ctx.fillRect(sx, sy - 18, textWidth + 8, 18);
+      ctx.fillStyle = "#000";
+      ctx.fillText(label, sx + 4, sy - 5);
+    });
+  }, [detections]);
+
+  useEffect(() => {
+    drawDetections();
+    window.addEventListener("resize", drawDetections);
+    return () => window.removeEventListener("resize", drawDetections);
+  }, [drawDetections]);
 
   const handleImageUpload = (event) => {
     const file = event.target.files[0];
     if (file) {
       setSelectedImage(file);
       setImagePreview(URL.createObjectURL(file));
-      setBoqData(null); // Reset BOQ when new image is uploaded
+      setBoqData(null);
+      setDetections([]);
     }
   };
 
@@ -95,25 +154,36 @@ function App() {
 
     setLoading(true);
 
-    // Simulate API call delay
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    try {
+      const formData = new FormData();
+      formData.append("image", selectedImage);
+      const response = await fetch(`${API_URL}/detect`, {
+        method: "POST",
+        body: formData,
+      });
 
-    // TODO: Replace with actual API call to the model
-    // const formData = new FormData();
-    // formData.append('image', selectedImage);
-    // const response = await fetch('/api/detect', { method: 'POST', body: formData });
-    // const data = await response.json();
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`);
+      }
 
-    // For now, use mockup data
-    const mockData = getMockupBOQ();
-    setBoqData(mockData);
-    setLoading(false);
+      const data = await response.json();
+      setBoqData(data.boq);
+      setDetections(data.detections || []);
+    } catch (err) {
+      console.error("Detection failed:", err);
+      // Fallback to mock data during development
+      const mockData = getMockupBOQ();
+      setBoqData(mockData);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleReset = () => {
     setSelectedImage(null);
     setImagePreview(null);
     setBoqData(null);
+    setDetections([]);
   };
 
   const getTotalItems = () => {
@@ -234,6 +304,54 @@ function App() {
             >
               Upload New Image
             </Button>
+
+            {/* Annotated Image */}
+            {imagePreview && (
+              <Box sx={{ position: "relative", mb: 3 }}>
+                <Typography variant="h6" gutterBottom>
+                  Detected Symbols
+                </Typography>
+                <Box sx={{ position: "relative", display: "inline-block", width: "100%" }}>
+                  <img
+                    ref={imgRef}
+                    src={imagePreview}
+                    alt="Analyzed plan"
+                    onLoad={drawDetections}
+                    style={{
+                      width: "100%",
+                      display: "block",
+                      borderRadius: 8,
+                      border: "1px solid #ddd",
+                    }}
+                  />
+                  <canvas
+                    ref={canvasRef}
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: "100%",
+                      height: "100%",
+                      pointerEvents: "none",
+                    }}
+                  />
+                </Box>
+                {detections.length > 0 && (
+                  <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: "wrap", gap: 0.5 }}>
+                    {Object.entries(COLORS).filter(([name]) =>
+                      detections.some((d) => d.class_name === name)
+                    ).map(([name, color]) => (
+                      <Chip
+                        key={name}
+                        label={name}
+                        size="small"
+                        sx={{ bgcolor: color, color: "#000", fontWeight: "bold" }}
+                      />
+                    ))}
+                  </Stack>
+                )}
+              </Box>
+            )}
 
             {/* Header with total */}
             <Box

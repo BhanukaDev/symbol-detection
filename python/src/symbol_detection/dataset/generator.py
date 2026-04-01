@@ -57,25 +57,25 @@ class COCODatasetGenerator:
         """
         result: np.ndarray = img.copy()
         
-        # Add Gaussian noise
-        if random.random() < 0.6:
-            noise_intensity = random.uniform(0.001, 0.01)
+        # Add Gaussian noise (subtle)
+        if random.random() < 0.4:
+            noise_intensity = random.uniform(0.001, 0.005)
             noise = np.random.normal(0, 255 * noise_intensity, result.shape)
             result = np.clip(result.astype(np.float32) + noise, 0, 255).astype(np.uint8)
         
-        # Random brightness adjustment
-        if random.random() < 0.5:
-            brightness_factor = random.uniform(0.85, 1.15)
+        # Random brightness adjustment (gentle)
+        if random.random() < 0.4:
+            brightness_factor = random.uniform(0.9, 1.1)
             result = np.clip(result.astype(np.float32) * brightness_factor, 0, 255).astype(np.uint8)
         
-        # Random contrast adjustment
-        if random.random() < 0.5:
-            contrast_factor = random.uniform(0.8, 1.2)
+        # Random contrast adjustment (gentle)
+        if random.random() < 0.3:
+            contrast_factor = random.uniform(0.9, 1.1)
             mean = result.mean()
             result = np.clip((result.astype(np.float32) - mean) * contrast_factor + mean, 0, 255).astype(np.uint8)
         
         # Random color shift (hue adjustment for color images)
-        if len(result.shape) == 3 and result.shape[2] == 3 and random.random() < 0.3:
+        if len(result.shape) == 3 and result.shape[2] == 3 and random.random() < 0.15:
             try:
                 # Ensure result is uint8 and contiguous
                 result = np.ascontiguousarray(result, dtype=np.uint8)
@@ -221,13 +221,14 @@ class COCODatasetGenerator:
         door_size: int = 2,
         min_room_width: int = 8,
         min_building_area_ratio: float = 0.6,
-        symbols_per_room: Tuple[int, int] = (1, 4),
-        num_distractors_per_room: Tuple[int, int] = (0, 2),
-        scale_range: Tuple[float, float] = (0.8, 1.5),
+        symbols_per_room: Tuple[int, int] = (0, 3),
+        num_distractors_per_room: Tuple[int, int] = (0, 1),
+        scale_range: Tuple[float, float] = (0.8, 1.2),
         rotation_range: Tuple[float, float] = (0.0, 360.0),
+        discrete_rotations: Optional[List[float]] = None,
         symbol_classes: Optional[List[str]] = None,
         show_labels: bool = False,
-        apply_symbol_effects: bool = True,
+        apply_symbol_effects: bool = False,
         apply_image_effects: bool = True,
         apply_lighting_effects: bool = False,
     ) -> Dict:
@@ -246,6 +247,7 @@ class COCODatasetGenerator:
             num_distractors_per_room: (min, max) number of furniture items per room.
             scale_range: (min, max) scale factor range for symbols.
             rotation_range: (min, max) rotation angle range in degrees.
+            discrete_rotations: If set, symbols snap to these angles instead of continuous range.
             symbol_classes: List of symbol classes to use, or None for all.
             show_labels: Whether to show room labels on the images.
             apply_symbol_effects: Whether to apply distortion effects to symbols.
@@ -313,6 +315,7 @@ class COCODatasetGenerator:
                 num_distractors_per_room=num_distractors_per_room,
                 scale_range=scale_range,
                 rotation_range=rotation_range,
+                discrete_rotations=discrete_rotations,
                 symbol_classes=symbol_classes,
                 show_labels=show_labels,
                 apply_symbol_effects=apply_symbol_effects,
