@@ -63,7 +63,7 @@ class COCODetectionDataset(Dataset):
         coco_json_path: str | Path,
         images_dir: str | Path,
         transform=None,
-        max_size: int = 800,
+        max_size: int = 640,
         augment: bool = False,
     ):
         self.coco_json_path = Path(coco_json_path)
