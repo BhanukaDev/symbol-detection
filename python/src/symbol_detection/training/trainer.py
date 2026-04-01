@@ -28,6 +28,7 @@ class Trainer:
         device: Optional[str] = None,
         use_ciou_loss: bool = True,
         eval_every_n: int = 10,
+        save_every_n: int = 20,
         enable_ap_eval: bool = True,
     ):
         self.dataset_dir = Path(dataset_dir)
@@ -40,6 +41,7 @@ class Trainer:
         self.num_epochs = num_epochs
         self.use_ciou_loss = use_ciou_loss
         self.eval_every_n = eval_every_n
+        self.save_every_n = save_every_n
         self.enable_ap_eval = enable_ap_eval
         
         if device is None:
@@ -276,7 +278,7 @@ class Trainer:
             else:
                 print()  # Newline
             
-            if (epoch + 1) % 10 == 0:
+            if (epoch + 1) % self.save_every_n == 0:
                 self.save_checkpoint(epoch + 1)
         
         # Final evaluation logic remains same...
