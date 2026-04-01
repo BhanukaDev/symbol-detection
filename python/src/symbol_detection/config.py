@@ -12,9 +12,9 @@ DISTRACTOR_DIR = DATA_DIR / "furnitures-and-other"
 # Dataset settings
 DATASET_SETTINGS = {
     "num_images": 10,
-    "rows": (10, 60),
-    "cols": (10, 60),
-    "cell_size": (15, 25),
+    "rows": (20, 70),
+    "cols": (20, 70),
+    "cell_size": (8, 30),
     "apply_symbol_effects": True,
     "apply_image_effects": True,
 }

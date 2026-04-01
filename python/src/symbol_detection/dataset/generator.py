@@ -329,8 +329,20 @@ class COCODatasetGenerator:
             if apply_image_effects:
                 floor_plan_img = self._apply_image_effects(floor_plan_img)
 
-            # Get image dimensions
+            # Randomly rescale ~30% of images to larger sizes (1200-2400px wide)
+            # to simulate real high-resolution floor plan uploads that SAHI will tile.
             height, width = floor_plan_img.shape[:2]
+            if random.random() < 0.3:
+                target_w = random.randint(1200, 2400)
+                scale = target_w / width
+                target_h = int(height * scale)
+                floor_plan_img = cv2.resize(floor_plan_img, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
+                annotations = [
+                    {**ann, "x": ann["x"] * scale, "y": ann["y"] * scale,
+                     "width": ann["width"] * scale, "height": ann["height"] * scale}
+                    for ann in annotations
+                ]
+                height, width = floor_plan_img.shape[:2]
 
             # Save the image
             filename = f"floor_plan_{i:04d}.png"
