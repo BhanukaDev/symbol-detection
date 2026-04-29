@@ -15,34 +15,39 @@ from pathlib import Path
 from floor_grid import generate_building_with_symbols
 
 
+# Fixed category order — must never change between dataset generations.
+# This mapping is the ground truth for all training and deployment.
+SYMBOL_CATEGORIES = [
+    {"id": 1, "name": "Light"},
+    {"id": 2, "name": "Two-pole, one-way switch"},
+    {"id": 3, "name": "Duplex Receptacle"},
+    {"id": 4, "name": "Junction Box"},
+    {"id": 5, "name": "Single-pole, one-way switch"},
+    {"id": 6, "name": "Two-way switch"},
+    {"id": 7, "name": "Three-pole, one-way switch"},
+]
+
+
 class COCODatasetGenerator:
     """Generates floor plan dataset with COCO format annotations."""
 
     def __init__(self, output_dir: str = "dataset", symbols_dir: str = "data/electrical-symbols", distractor_dir: Optional[str] = None):
-        """
-        Initialize the dataset generator.
-
-        Args:
-            output_dir: Directory where images and annotations will be saved.
-            symbols_dir: Directory containing electrical symbol images.
-            distractor_dir: Directory containing furniture/distractor images.
-        """
         self.output_dir = Path(output_dir)
         self.symbols_dir = symbols_dir
         self.distractor_dir = distractor_dir
         self.images_dir = self.output_dir / "images"
         self.annotations_file = self.output_dir / "annotations.json"
-        
-        # COCO format data structures
+
+        # Pre-seed categories in fixed order so IDs are always deterministic.
         self.coco_data = {
             "images": [],
             "annotations": [],
-            "categories": []
+            "categories": [dict(c) for c in SYMBOL_CATEGORIES],
         }
-        
-        # Track category IDs
-        self.category_name_to_id: Dict[str, int] = {}
-        self.next_category_id = 1
+        self.category_name_to_id: Dict[str, int] = {
+            c["name"]: c["id"] for c in SYMBOL_CATEGORIES
+        }
+        self.next_category_id = len(SYMBOL_CATEGORIES) + 1
         self.next_annotation_id = 1
 
     def _apply_image_effects(self, img: np.ndarray) -> np.ndarray:
@@ -278,10 +283,14 @@ class COCODatasetGenerator:
             print("✓ Cleared existing images directory")
         self.images_dir.mkdir(parents=True, exist_ok=True)
         
-        # Reset annotation state for fresh generation
-        self.coco_data = {"images": [], "annotations": [], "categories": []}
-        self.category_name_to_id = {}
-        self.next_category_id = 1
+        # Reset annotation state for fresh generation — keep fixed category mapping.
+        self.coco_data = {
+            "images": [],
+            "annotations": [],
+            "categories": [dict(c) for c in SYMBOL_CATEGORIES],
+        }
+        self.category_name_to_id = {c["name"]: c["id"] for c in SYMBOL_CATEGORIES}
+        self.next_category_id = len(SYMBOL_CATEGORIES) + 1
         self.next_annotation_id = 1
 
         print(f"Generating {num_images} dataset images with varied dimensions...")

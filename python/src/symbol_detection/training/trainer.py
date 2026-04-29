@@ -189,8 +189,7 @@ class Trainer:
                 } for t in targets]
                 
                 loss_dict = self.model(images, targets)
-                losses = sum(loss_dict.values(), torch.tensor(0.0, device=self.device))
-                
+                losses = torch.stack(list(loss_dict.values())).sum()
                 total_loss += losses.item()
         
         avg_loss = total_loss / len(val_loader)  # type: ignore
@@ -303,6 +302,7 @@ class Trainer:
             'epoch': epoch,
             'model_state_dict': self.model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
+            'scheduler_state_dict': self.scheduler.state_dict(),
             'train_loss': self.train_losses[-1] if self.train_losses else None,
             'val_loss': self.val_losses[-1] if self.val_losses else None,
         }, checkpoint_path)
@@ -320,16 +320,29 @@ class Trainer:
         print(f"Saved metrics: {metrics_path}")
 
     def load_checkpoint(self, checkpoint_path: str | Path, resume_training: bool = False):
-        checkpoint = torch.load(checkpoint_path, map_location=self.device)
+        checkpoint = torch.load(
+            checkpoint_path,
+            map_location=lambda storage, loc: storage,
+            weights_only=False,
+        )
         self.model.load_state_dict(checkpoint['model_state_dict'])
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        
+
+        if 'scheduler_state_dict' in checkpoint:
+            self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+        else:
+            # Old checkpoint without scheduler state — fast-forward to the saved epoch
+            # so the LR continues from roughly the right position on the cosine curve.
+            saved_epoch = checkpoint.get('epoch', 0)
+            if isinstance(saved_epoch, int):
+                for _ in range(saved_epoch):
+                    self.scheduler.step()
+
         if resume_training:
             self.start_epoch = checkpoint.get('epoch', 0)
-            if isinstance(self.start_epoch, str): # Handle 'final' case
-                 self.start_epoch = 0
-            
-            # Try to load metric history if available
+            if isinstance(self.start_epoch, str):
+                self.start_epoch = 0
+
             metrics_path = self.output_dir / 'metrics.json'
             if metrics_path.exists():
                 with open(metrics_path, 'r') as f:
@@ -337,6 +350,6 @@ class Trainer:
                     self.train_losses = metrics.get('train_losses', [])
                     self.val_losses = metrics.get('val_losses', [])
                     self.ap_history = metrics.get('ap_history', [])
-            
+
         print(f"Loaded checkpoint: {checkpoint_path}")
         return checkpoint
