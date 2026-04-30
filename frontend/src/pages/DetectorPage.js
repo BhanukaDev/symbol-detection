@@ -20,6 +20,11 @@ import {
   IconButton,
   Tooltip,
   Grid,
+  Slider,
+  Menu,
+  MenuItem,
+  ListItemIcon,
+  ListItemText,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import SearchIcon from "@mui/icons-material/Search";
@@ -30,6 +35,9 @@ import NavigateNextIcon from "@mui/icons-material/NavigateNext";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import CenterFocusStrongIcon from "@mui/icons-material/CenterFocusStrong";
 import ZoomOutMapIcon from "@mui/icons-material/ZoomOutMap";
+import TextFieldsIcon from "@mui/icons-material/TextFields";
+import EditIcon from "@mui/icons-material/Edit";
+import CheckIcon from "@mui/icons-material/Check";
 import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 
 const COLORS = {
@@ -46,6 +54,31 @@ const API_URL =
   process.env.REACT_APP_API_URL ||
   "https://sirbhanus-symbol-detection.hf.space";
 
+const detSize = (d) => {
+  const [x1, y1, x2, y2] = d.bbox;
+  return Math.round(Math.sqrt((x2 - x1) * (y2 - y1)));
+};
+
+const iou = (a, b) => {
+  const [ax1, ay1, ax2, ay2] = a.bbox;
+  const [bx1, by1, bx2, by2] = b.bbox;
+  const ix1 = Math.max(ax1, bx1), iy1 = Math.max(ay1, by1);
+  const ix2 = Math.min(ax2, bx2), iy2 = Math.min(ay2, by2);
+  const inter = Math.max(0, ix2 - ix1) * Math.max(0, iy2 - iy1);
+  if (!inter) return 0;
+  return inter / ((ax2-ax1)*(ay2-ay1) + (bx2-bx1)*(by2-by1) - inter);
+};
+
+const nmsFilter = (dets, threshold) => {
+  if (threshold >= 1) return dets;
+  const sorted = [...dets].sort((a, b) => b.confidence - a.confidence);
+  const kept = [];
+  for (const det of sorted) {
+    if (kept.every((k) => iou(k, det) < threshold)) kept.push(det);
+  }
+  return kept;
+};
+
 export default function DetectorPage() {
   const [selectedImage, setSelectedImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
@@ -55,15 +88,43 @@ export default function DetectorPage() {
   const [error, setError] = useState(null);
   const [dragActive, setDragActive] = useState(false);
   const [focusedIdx, setFocusedIdx] = useState(-1);
+  const [showLabels, setShowLabels] = useState(false);
+  const [sizeRange, setSizeRange] = useState([0, 9999]);
+  const [sizeBounds, setSizeBounds] = useState([0, 9999]);
+  const [confRange, setConfRange] = useState([0, 1]);
+  const [confBounds, setConfBounds] = useState([0, 1]);
+  const [overlapThresh, setOverlapThresh] = useState(1);
+  const [hoveredIdx, setHoveredIdx] = useState(-1);
+  const [hoverPos, setHoverPos] = useState({ x: 0, y: 0 });
+  const [classMenuPos, setClassMenuPos] = useState(null);
+  const [classMenuDet, setClassMenuDet] = useState(null);
   const canvasRef = useRef(null);
   const imgRef = useRef(null);
   const transformRef = useRef(null);
   const wrapperRef = useRef(null);
+  const mouseDownPos = useRef(null);
+
+  // Detections passing the size filter (master list is never touched by slider)
+  const visibleDetections = useMemo(() => {
+    if (!detections.length) return [];
+    const filtered = detections.filter((d) => {
+      const s = detSize(d);
+      return (
+        s >= sizeRange[0] && s <= sizeRange[1] &&
+        d.confidence >= confRange[0] && d.confidence <= confRange[1]
+      );
+    });
+    return nmsFilter(filtered, overlapThresh);
+  }, [detections, sizeRange, confRange, overlapThresh]);
+
+  useEffect(() => {
+    setFocusedIdx(-1);
+  }, [sizeRange, confRange, overlapThresh]);
 
   const computedBoq = useMemo(() => {
-    if (!detections.length) return [];
+    if (!visibleDetections.length) return [];
     const counts = {};
-    detections.forEach((d) => {
+    visibleDetections.forEach((d) => {
       counts[d.class_name] = (counts[d.class_name] || 0) + 1;
     });
     return Object.entries(counts).map(([name, qty], i) => ({
@@ -73,12 +134,12 @@ export default function DetectorPage() {
       quantity: qty,
       unit: "nos",
     }));
-  }, [detections]);
+  }, [visibleDetections]);
 
   const drawDetections = useCallback(() => {
     const canvas = canvasRef.current;
     const img = imgRef.current;
-    if (!canvas || !img || !detections.length) return;
+    if (!canvas || !img) return;
 
     const rect = img.getBoundingClientRect();
     canvas.width = rect.width;
@@ -90,17 +151,21 @@ export default function DetectorPage() {
     const ctx = canvas.getContext("2d");
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    detections.forEach((det, idx) => {
+    const isNavigating = focusedIdx >= 0;
+
+    visibleDetections.forEach((det, idx) => {
+      const isFocused = idx === focusedIdx;
+      // In navigation mode, skip all non-focused detections entirely
+      if (isNavigating && !isFocused) return;
+
       const [x1, y1, x2, y2] = det.bbox;
       const sx = x1 * scaleX;
       const sy = y1 * scaleY;
       const sw = (x2 - x1) * scaleX;
       const sh = (y2 - y1) * scaleY;
       const color = COLORS[det.class_name] || "#00FF00";
-      const isFocused = idx === focusedIdx;
 
-      const alpha = focusedIdx >= 0 && !isFocused ? 0.25 : 1;
-      ctx.globalAlpha = alpha;
+      ctx.globalAlpha = 1;
 
       ctx.fillStyle = color + (isFocused ? "30" : "18");
       ctx.fillRect(sx, sy, sw, sh);
@@ -115,22 +180,25 @@ export default function DetectorPage() {
         ctx.strokeRect(sx - 2, sy - 2, sw + 4, sh + 4);
       }
 
-      const label = `${det.class_name} ${(det.confidence * 100).toFixed(0)}%`;
-      ctx.font = "600 11px Inter, Arial";
-      const textWidth = ctx.measureText(label).width;
-      const labelHeight = 20;
-      const labelY = sy > labelHeight ? sy - labelHeight : sy;
+      // Show label when: navigating (always) OR showLabels toggle is on
+      if (isNavigating || showLabels) {
+        const label = `${det.class_name} ${(det.confidence * 100).toFixed(0)}%`;
+        ctx.font = "600 11px Inter, Arial";
+        const textWidth = ctx.measureText(label).width;
+        const labelHeight = 20;
+        const labelY = sy > labelHeight ? sy - labelHeight : sy;
 
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.roundRect(sx, labelY, textWidth + 10, labelHeight, 4);
-      ctx.fill();
-      ctx.fillStyle = "#000";
-      ctx.fillText(label, sx + 5, labelY + 14);
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.roundRect(sx, labelY, textWidth + 10, labelHeight, 4);
+        ctx.fill();
+        ctx.fillStyle = "#000";
+        ctx.fillText(label, sx + 5, labelY + 14);
+      }
 
       ctx.globalAlpha = 1;
     });
-  }, [detections, focusedIdx]);
+  }, [visibleDetections, focusedIdx, showLabels]);
 
   useEffect(() => {
     drawDetections();
@@ -139,15 +207,14 @@ export default function DetectorPage() {
   }, [drawDetections]);
 
   useEffect(() => {
-    if (focusedIdx < 0 || !detections[focusedIdx] || !imgRef.current || !transformRef.current || !wrapperRef.current) return;
+    if (focusedIdx < 0 || !visibleDetections[focusedIdx] || !imgRef.current || !transformRef.current || !wrapperRef.current) return;
 
-    // We don't need resetTransform, setTransform will smoothly transition
     requestAnimationFrame(() => {
       const img = imgRef.current;
       const api = transformRef.current;
       const wrapper = api?.instance?.wrapperComponent || wrapperRef.current;
       const content = api?.instance?.contentComponent || img;
-      
+
       if (!img || !wrapper) return;
 
       const ww = wrapper.clientWidth;
@@ -155,7 +222,7 @@ export default function DetectorPage() {
       const imgW = content.clientWidth || img.clientWidth;
       const imgH = content.clientHeight || img.clientHeight;
 
-      const det = detections[focusedIdx];
+      const det = visibleDetections[focusedIdx];
       const [x1, y1, x2, y2] = det.bbox;
 
       const sx = imgW / img.naturalWidth;
@@ -172,7 +239,67 @@ export default function DetectorPage() {
 
       api.setTransform(offsetX, offsetY, zoom, 300, "easeOut");
     });
-  }, [focusedIdx, detections]);
+  }, [focusedIdx, visibleDetections]);
+
+  const hitTest = useCallback((px, py, rect) => {
+    const img = imgRef.current;
+    if (!img || !rect) return -1;
+    const scaleX = rect.width / img.naturalWidth;
+    const scaleY = rect.height / img.naturalHeight;
+    const indices =
+      focusedIdx >= 0
+        ? [focusedIdx]
+        : [...Array(visibleDetections.length).keys()].reverse();
+    for (const i of indices) {
+      if (i >= visibleDetections.length) continue;
+      const [x1, y1, x2, y2] = visibleDetections[i].bbox;
+      if (px >= x1 * scaleX && px <= x2 * scaleX && py >= y1 * scaleY && py <= y2 * scaleY)
+        return i;
+    }
+    return -1;
+  }, [visibleDetections, focusedIdx]);
+
+  const handleCanvasMouseMove = useCallback((e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const px = e.clientX - rect.left;
+    const py = e.clientY - rect.top;
+    const idx = hitTest(px, py, rect);
+    setHoveredIdx(idx);
+    if (idx >= 0) setHoverPos({ x: px, y: py });
+    e.currentTarget.style.cursor = idx >= 0 ? "pointer" : "default";
+  }, [hitTest]);
+
+  const handleCanvasMouseLeave = useCallback(() => setHoveredIdx(-1), []);
+
+  const handleCanvasMouseDown = useCallback((e) => {
+    mouseDownPos.current = { x: e.clientX, y: e.clientY };
+  }, []);
+
+  const handleCanvasClick = useCallback((e) => {
+    if (mouseDownPos.current) {
+      const dx = e.clientX - mouseDownPos.current.x;
+      const dy = e.clientY - mouseDownPos.current.y;
+      if (Math.sqrt(dx * dx + dy * dy) > 5) return; // was a drag
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const px = e.clientX - rect.left;
+    const py = e.clientY - rect.top;
+    const idx = hitTest(px, py, rect);
+    if (idx >= 0) {
+      setFocusedIdx(idx);
+      setClassMenuPos({ x: e.clientX, y: e.clientY });
+      setClassMenuDet(visibleDetections[idx]);
+    }
+  }, [hitTest, visibleDetections]);
+
+  const handleClassChange = (newClass) => {
+    if (!classMenuDet) return;
+    setDetections((prev) =>
+      prev.map((d) => (d === classMenuDet ? { ...d, class_name: newClass } : d))
+    );
+    setClassMenuPos(null);
+    setClassMenuDet(null);
+  };
 
   const handleFile = (file) => {
     if (file && file.type.startsWith("image/")) {
@@ -203,6 +330,7 @@ export default function DetectorPage() {
     if (!selectedImage) return;
     setLoading(true);
     setFocusedIdx(-1);
+    setShowLabels(false);
     try {
       const formData = new FormData();
       formData.append("image", selectedImage);
@@ -213,7 +341,17 @@ export default function DetectorPage() {
       if (!response.ok) throw new Error(`Server error: ${response.status}`);
       const data = await response.json();
       setBoqData(data.boq);
-      setDetections(data.detections || []);
+      const dets = data.detections || [];
+      setDetections(dets);
+      if (dets.length > 0) {
+        const sizes = dets.map(detSize);
+        setSizeBounds([Math.min(...sizes), Math.max(...sizes)]);
+        setSizeRange([Math.min(...sizes), Math.max(...sizes)]);
+        const confs = dets.map((d) => d.confidence);
+        setConfBounds([Math.min(...confs), Math.max(...confs)]);
+        setConfRange([Math.min(...confs), Math.max(...confs)]);
+        setOverlapThresh(1);
+      }
     } catch (err) {
       console.error("Detection failed:", err);
       setError(`Detection failed: ${err.message}. Please try again.`);
@@ -228,16 +366,24 @@ export default function DetectorPage() {
     setBoqData(null);
     setDetections([]);
     setFocusedIdx(-1);
+    setClassMenuPos(null);
+    setClassMenuDet(null);
+    setSizeRange([0, 9999]);
+    setSizeBounds([0, 9999]);
+    setConfRange([0, 1]);
+    setConfBounds([0, 1]);
+    setOverlapThresh(1);
   };
 
   const handleRemoveDetection = () => {
-    if (focusedIdx < 0 || focusedIdx >= detections.length) return;
-    const next = detections.filter((_, i) => i !== focusedIdx);
+    if (focusedIdx < 0 || focusedIdx >= visibleDetections.length) return;
+    const toRemove = visibleDetections[focusedIdx];
+    const next = detections.filter((d) => d !== toRemove);
     setDetections(next);
-    if (next.length === 0) {
+    if (visibleDetections.length - 1 === 0) {
       setFocusedIdx(-1);
-    } else if (focusedIdx >= next.length) {
-      setFocusedIdx(next.length - 1);
+    } else if (focusedIdx >= visibleDetections.length - 1) {
+      setFocusedIdx(visibleDetections.length - 2);
     }
   };
 
@@ -247,20 +393,20 @@ export default function DetectorPage() {
   };
 
   const handlePrev = () => {
-    if (!detections.length) return;
+    if (!visibleDetections.length) return;
     setFocusedIdx((prev) =>
-      prev <= 0 ? detections.length - 1 : prev - 1
+      prev <= 0 ? visibleDetections.length - 1 : prev - 1
     );
   };
 
   const handleNext = () => {
-    if (!detections.length) return;
+    if (!visibleDetections.length) return;
     setFocusedIdx((prev) =>
-      prev >= detections.length - 1 ? 0 : prev + 1
+      prev >= visibleDetections.length - 1 ? 0 : prev + 1
     );
   };
 
-  const displayBoq = computedBoq.length > 0 ? computedBoq : boqData || [];
+  const displayBoq = computedBoq;
   const getTotalItems = () =>
     displayBoq.reduce((sum, item) => sum + item.quantity, 0);
 
@@ -282,7 +428,12 @@ export default function DetectorPage() {
     URL.revokeObjectURL(url);
   };
 
-  const focusedDet = focusedIdx >= 0 ? detections[focusedIdx] : null;
+  const focusedDet = focusedIdx >= 0 ? visibleDetections[focusedIdx] : null;
+  const showSizeFilter = sizeBounds[0] < sizeBounds[1];
+  const showConfFilter = confBounds[0] < confBounds[1];
+  const showOverlapFilter = detections.length > 1;
+  const showFilters = showSizeFilter || showConfFilter || showOverlapFilter;
+  const hiddenCount = detections.length - visibleDetections.length;
 
   return (
     <Box sx={{ py: 5, minHeight: "calc(100vh - 64px)" }}>
@@ -436,10 +587,18 @@ export default function DetectorPage() {
                 </Button>
                 <Stack direction="row" spacing={1}>
                   <Chip
-                    label={`${detections.length} detections`}
+                    label={`${visibleDetections.length} detections`}
                     size="small"
                     sx={{ bgcolor: "secondary.main", color: "white" }}
                   />
+                  {hiddenCount > 0 && (
+                    <Chip
+                      label={`${hiddenCount} filtered`}
+                      size="small"
+                      variant="outlined"
+                      sx={{ color: "text.secondary" }}
+                    />
+                  )}
                   <Chip
                     label={`${getTotalItems()} items`}
                     size="small"
@@ -458,6 +617,7 @@ export default function DetectorPage() {
                       overflow: "hidden",
                     }}
                   >
+                    {/* toolbar */}
                     <Stack
                       direction="row"
                       alignItems="center"
@@ -472,17 +632,26 @@ export default function DetectorPage() {
                     >
                       <Typography variant="subtitle2" color="text.secondary">
                         {focusedIdx >= 0
-                          ? `Detection ${focusedIdx + 1} / ${detections.length}`
+                          ? `Detection ${focusedIdx + 1} / ${visibleDetections.length}`
                           : "Overview — scroll to zoom"}
                       </Typography>
                       <Stack direction="row" spacing={0.5} alignItems="center">
+                        <Tooltip title={showLabels ? "Hide labels" : "Show labels"}>
+                          <IconButton
+                            size="small"
+                            onClick={() => setShowLabels((v) => !v)}
+                            sx={{ color: showLabels ? "secondary.main" : "text.secondary" }}
+                          >
+                            <TextFieldsIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
                         <Tooltip title="Previous (←)">
-                          <IconButton size="small" onClick={handlePrev} disabled={!detections.length}>
+                          <IconButton size="small" onClick={handlePrev} disabled={!visibleDetections.length}>
                             <NavigateBeforeIcon />
                           </IconButton>
                         </Tooltip>
                         <Tooltip title="Next (→)">
-                          <IconButton size="small" onClick={handleNext} disabled={!detections.length}>
+                          <IconButton size="small" onClick={handleNext} disabled={!visibleDetections.length}>
                             <NavigateNextIcon />
                           </IconButton>
                         </Tooltip>
@@ -506,6 +675,83 @@ export default function DetectorPage() {
                         )}
                       </Stack>
                     </Stack>
+
+                    {showFilters && (
+                      <Box
+                        sx={{
+                          px: 2.5,
+                          pt: 1.5,
+                          pb: 1,
+                          borderBottom: "1px solid",
+                          borderColor: "divider",
+                        }}
+                      >
+                        {showSizeFilter && (
+                          <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: showConfFilter || showOverlapFilter ? 1 : 0 }}>
+                            <Typography variant="caption" color="text.secondary" noWrap sx={{ minWidth: 72 }}>
+                              Size
+                            </Typography>
+                            <Slider
+                              value={sizeRange}
+                              onChange={(_, v) => setSizeRange(v)}
+                              min={sizeBounds[0]}
+                              max={sizeBounds[1]}
+                              valueLabelDisplay="auto"
+                              valueLabelFormat={(v) => `${v}px`}
+                              size="small"
+                              disableSwap
+                              sx={{ color: "secondary.main" }}
+                            />
+                            <Typography variant="caption" color="text.secondary" noWrap sx={{ minWidth: 88, textAlign: "right" }}>
+                              {sizeRange[0]}–{sizeRange[1]}px
+                            </Typography>
+                          </Stack>
+                        )}
+                        {showConfFilter && (
+                          <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: showOverlapFilter ? 1 : 0 }}>
+                            <Typography variant="caption" color="text.secondary" noWrap sx={{ minWidth: 72 }}>
+                              Confidence
+                            </Typography>
+                            <Slider
+                              value={confRange}
+                              onChange={(_, v) => setConfRange(v)}
+                              min={confBounds[0]}
+                              max={confBounds[1]}
+                              step={0.01}
+                              valueLabelDisplay="auto"
+                              valueLabelFormat={(v) => `${(v * 100).toFixed(0)}%`}
+                              size="small"
+                              disableSwap
+                              sx={{ color: "secondary.main" }}
+                            />
+                            <Typography variant="caption" color="text.secondary" noWrap sx={{ minWidth: 88, textAlign: "right" }}>
+                              {(confRange[0] * 100).toFixed(0)}–{(confRange[1] * 100).toFixed(0)}%
+                            </Typography>
+                          </Stack>
+                        )}
+                        {showOverlapFilter && (
+                          <Stack direction="row" spacing={2} alignItems="center">
+                            <Typography variant="caption" color="text.secondary" noWrap sx={{ minWidth: 72 }}>
+                              Max overlap
+                            </Typography>
+                            <Slider
+                              value={overlapThresh}
+                              onChange={(_, v) => setOverlapThresh(v)}
+                              min={0}
+                              max={1}
+                              step={0.05}
+                              valueLabelDisplay="auto"
+                              valueLabelFormat={(v) => `${(v * 100).toFixed(0)}%`}
+                              size="small"
+                              sx={{ color: "secondary.main" }}
+                            />
+                            <Typography variant="caption" color="text.secondary" noWrap sx={{ minWidth: 88, textAlign: "right" }}>
+                              {(overlapThresh * 100).toFixed(0)}% IoU
+                            </Typography>
+                          </Stack>
+                        )}
+                      </Box>
+                    )}
 
                     {focusedDet && (
                       <Box sx={{ px: 2, pt: 1 }}>
@@ -559,15 +805,53 @@ export default function DetectorPage() {
                               />
                               <canvas
                                 ref={canvasRef}
+                                onMouseMove={handleCanvasMouseMove}
+                                onMouseLeave={handleCanvasMouseLeave}
+                                onMouseDown={handleCanvasMouseDown}
+                                onClick={handleCanvasClick}
                                 style={{
                                   position: "absolute",
                                   top: 0,
                                   left: 0,
                                   width: "100%",
                                   height: "100%",
-                                  pointerEvents: "none",
                                 }}
                               />
+                              {hoveredIdx >= 0 && visibleDetections[hoveredIdx] && (
+                                <Box
+                                  sx={{
+                                    position: "absolute",
+                                    left: hoverPos.x + 12,
+                                    top: hoverPos.y - 28,
+                                    bgcolor: "rgba(0,0,0,0.78)",
+                                    color: "#fff",
+                                    px: 1,
+                                    py: 0.25,
+                                    borderRadius: 1,
+                                    fontSize: "0.72rem",
+                                    fontWeight: 600,
+                                    pointerEvents: "none",
+                                    whiteSpace: "nowrap",
+                                    zIndex: 10,
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 0.5,
+                                  }}
+                                >
+                                  <Box
+                                    sx={{
+                                      width: 8,
+                                      height: 8,
+                                      borderRadius: "50%",
+                                      bgcolor: COLORS[visibleDetections[hoveredIdx].class_name] || "#ccc",
+                                      flexShrink: 0,
+                                    }}
+                                  />
+                                  {visibleDetections[hoveredIdx].class_name}{" "}
+                                  {(visibleDetections[hoveredIdx].confidence * 100).toFixed(0)}%
+                                  <EditIcon sx={{ fontSize: 10, opacity: 0.7, ml: 0.25 }} />
+                                </Box>
+                              )}
                             </Box>
                           </TransformComponent>
                         </TransformWrapper>
@@ -581,12 +865,12 @@ export default function DetectorPage() {
                     >
                       {Object.entries(COLORS)
                         .filter(([name]) =>
-                          detections.some((d) => d.class_name === name)
+                          visibleDetections.some((d) => d.class_name === name)
                         )
                         .map(([name, color]) => (
                           <Chip
                             key={name}
-                            label={`${name} (${detections.filter((d) => d.class_name === name).length})`}
+                            label={`${name} (${visibleDetections.filter((d) => d.class_name === name).length})`}
                             size="small"
                             sx={{
                               bgcolor: color + "25",
@@ -723,6 +1007,30 @@ export default function DetectorPage() {
           </Fade>
         )}
       </Container>
+
+      <Menu
+        open={!!classMenuPos}
+        onClose={() => { setClassMenuPos(null); setClassMenuDet(null); }}
+        anchorReference="anchorPosition"
+        anchorPosition={classMenuPos ? { top: classMenuPos.y, left: classMenuPos.x } : undefined}
+      >
+        <Typography variant="caption" color="text.secondary" sx={{ px: 2, py: 0.5, display: "block" }}>
+          Change class
+        </Typography>
+        {Object.entries(COLORS).map(([cls, color]) => (
+          <MenuItem key={cls} onClick={() => handleClassChange(cls)} dense>
+            <ListItemIcon sx={{ minWidth: 28 }}>
+              <Box sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: color }} />
+            </ListItemIcon>
+            <ListItemText primaryTypographyProps={{ variant: "body2" }}>
+              {cls}
+            </ListItemText>
+            {classMenuDet?.class_name === cls && (
+              <CheckIcon sx={{ fontSize: 14, color: "secondary.main", ml: 1 }} />
+            )}
+          </MenuItem>
+        ))}
+      </Menu>
 
       <Snackbar
         open={!!error}
