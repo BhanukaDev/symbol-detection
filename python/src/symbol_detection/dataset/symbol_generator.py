@@ -1,5 +1,3 @@
-"""Symbol-focused dataset generator — no floor plan logic."""
-
 import cv2
 import json
 import random
@@ -26,10 +24,6 @@ SYMBOL_CATEGORIES = [
 ]
 
 
-# ---------------------------------------------------------------------------
-# Image helpers
-# ---------------------------------------------------------------------------
-
 def _load_symbols(symbols_dir: str) -> Dict[str, List[np.ndarray]]:
     result: Dict[str, List[np.ndarray]] = {}
     for folder in Path(symbols_dir).iterdir():
@@ -46,7 +40,6 @@ def _load_symbols(symbols_dir: str) -> Dict[str, List[np.ndarray]]:
 
 
 def _resize_to_target(img: np.ndarray, target_size: int) -> np.ndarray:
-    """Resize so the longer side == target_size, keeping aspect ratio."""
     h, w = img.shape[:2]
     scale = target_size / max(h, w)
     new_w, new_h = max(1, int(w * scale)), max(1, int(h * scale))
@@ -170,7 +163,7 @@ def _draw_distractors(canvas: np.ndarray, count: int) -> None:
                 cv2.line(canvas, px1, px2, color, random.randint(1, 2))
 
         elif kind == "curve":
-            # Quadratic Bezier via polyline approximation
+            # quadratic bezier
             p0 = np.array([random.randint(0, w), random.randint(0, h)], dtype=float)
             p1c = np.array([random.randint(0, w), random.randint(0, h)], dtype=float)
             p2 = np.array([random.randint(0, w), random.randint(0, h)], dtype=float)
@@ -190,10 +183,11 @@ def _draw_distractors(canvas: np.ndarray, count: int) -> None:
 
 def _apply_image_effects(img: np.ndarray,
                          apply_tint: bool = True,
-                         apply_blur: bool = True) -> np.ndarray:
+                         apply_blur: bool = True,
+                         apply_noise: bool = True) -> np.ndarray:
     f = img.copy().astype(np.float32)
 
-    if random.random() < 0.55:
+    if apply_noise and random.random() < 0.55:
         f += np.random.normal(0, random.uniform(2, 18), f.shape)
 
     if random.random() < 0.5:
@@ -204,14 +198,14 @@ def _apply_image_effects(img: np.ndarray,
         f = (f - mean) * random.uniform(0.8, 1.25) + mean
 
     if apply_tint and random.random() < 0.6:
-        if random.random() < 0.55:  # warm / incandescent
+        if random.random() < 0.55:
             f[:, :, 0] *= random.uniform(0.78, 0.95)
             f[:, :, 2] *= random.uniform(1.0, 1.18)
-        else:                        # cool / fluorescent
+        else:
             f[:, :, 0] *= random.uniform(1.0, 1.18)
             f[:, :, 2] *= random.uniform(0.78, 0.95)
 
-    # Low-light vignette path
+    # 25% chance of dark vignette, simulates phone photos in bad lighting
     if random.random() < 0.25:
         f *= random.uniform(0.55, 0.85)
         f += np.random.normal(0, random.uniform(8, 22), f.shape)
@@ -230,10 +224,6 @@ def _apply_image_effects(img: np.ndarray,
 
     return result
 
-
-# ---------------------------------------------------------------------------
-# Generator
-# ---------------------------------------------------------------------------
 
 class SymbolDatasetGenerator:
     def __init__(self, symbols_dir: str, output_dir: str = "dataset"):
@@ -262,6 +252,7 @@ class SymbolDatasetGenerator:
         apply_image_effects: bool = True,
         apply_tint: bool = True,
         apply_blur: bool = True,
+        apply_noise: bool = True,
     ) -> Dict:
         if rotations is None:
             rotations = [0.0, 90.0, 180.0, 270.0]
@@ -337,7 +328,7 @@ class SymbolDatasetGenerator:
                 ann_id += 1
 
             if apply_image_effects:
-                canvas = _apply_image_effects(canvas, apply_tint=apply_tint, apply_blur=apply_blur)
+                canvas = _apply_image_effects(canvas, apply_tint=apply_tint, apply_blur=apply_blur, apply_noise=apply_noise)
 
             fname = f"symbol_{i:04d}.png"
             cv2.imwrite(str(self.images_dir / fname), canvas)
@@ -361,10 +352,6 @@ class SymbolDatasetGenerator:
         return coco
 
 
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
-
 def main():
     parser = argparse.ArgumentParser(description="Generate symbol-focused training dataset")
     parser.add_argument("--symbols-dir", type=str, default="data/electrical-symbols")
@@ -372,25 +359,20 @@ def main():
     parser.add_argument("--num-images", type=int, default=200)
     parser.add_argument("--img-width", type=int, default=640)
     parser.add_argument("--img-height", type=int, default=640)
-    parser.add_argument("--symbols-min", type=int, default=3,
-                        help="Min symbols per image")
-    parser.add_argument("--symbols-max", type=int, default=14,
-                        help="Max symbols per image")
-    parser.add_argument("--size-min", type=int, default=12,
-                        help="Min symbol output size in px (longer side)")
-    parser.add_argument("--size-max", type=int, default=100,
-                        help="Max symbol output size in px (longer side)")
+    parser.add_argument("--symbols-min", type=int, default=3)
+    parser.add_argument("--symbols-max", type=int, default=14)
+    parser.add_argument("--size-min", type=int, default=12)
+    parser.add_argument("--size-max", type=int, default=100)
     parser.add_argument("--rotations", type=str, default="0,90,180,270",
-                        help="Comma-separated angles. Pass 'free' for continuous 0-360.")
-    parser.add_argument("--overlap-pad", type=int, default=4,
-                        help="Min pixel gap between placed symbols")
+                        help="comma-separated angles, or 'free' for 0-360")
+    parser.add_argument("--overlap-pad", type=int, default=4)
     parser.add_argument("--distractors-min", type=int, default=0)
-    parser.add_argument("--distractors-max", type=int, default=None,
-                        help="Defaults to --distractors-min when omitted")
+    parser.add_argument("--distractors-max", type=int, default=None)
     parser.add_argument("--no-symbol-effects", action="store_true")
     parser.add_argument("--no-image-effects", action="store_true")
     parser.add_argument("--no-tint", action="store_true")
     parser.add_argument("--no-blur", action="store_true")
+    parser.add_argument("--no-noise", action="store_true")
 
     args = parser.parse_args()
 
@@ -419,6 +401,7 @@ def main():
         apply_image_effects=not args.no_image_effects,
         apply_tint=not args.no_tint,
         apply_blur=not args.no_blur,
+        apply_noise=not args.no_noise,
     )
 
 

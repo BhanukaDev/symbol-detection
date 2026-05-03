@@ -69,6 +69,11 @@ CHECKPOINTS = [
     #     "filename":  "ckpt_v2clean_epoch170.pth",
     #     "gdrive_id": "1YQO4vkcezYOM0Mj1JUyRidWRzM12n5oj",
     # },
+    {
+        "label": "With CIoU Loss · epoch 420",
+        "filename": "ckpt_v6_epoch420.pth",
+        "gdrive_id": "12AQzoywCgbJhxDn_kY1j4NgN9-NlBIkK"
+    }
 
 ]
 
