@@ -1,2 +1,10 @@
 docs/
 hf-deploy/
+
+# Datasets
+dataset/
+python/dataset/
+python/dataset_preview/
+bm_dataset/
+bm_results/
+bm_checkpoints/
