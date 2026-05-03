@@ -134,7 +134,7 @@ def _draw_distractors(canvas: np.ndarray, count: int) -> None:
             random.randint(40, 180),
             random.randint(40, 180),
         ))
-        kind = random.choice(["rect", "circle", "ellipse", "line", "text"])
+        kind = random.choice(["rect", "circle", "ellipse", "line", "dashed_line", "curve", "text"])
         thick = random.choice([-1, 1, 2])
 
         if kind == "rect":
@@ -156,6 +156,29 @@ def _draw_distractors(canvas: np.ndarray, count: int) -> None:
             p1 = (random.randint(0, w), random.randint(0, h))
             p2 = (random.randint(0, w), random.randint(0, h))
             cv2.line(canvas, p1, p2, color, random.randint(1, 3))
+
+        elif kind == "dashed_line":
+            x1, y1 = random.randint(0, w), random.randint(0, h)
+            x2, y2 = random.randint(0, w), random.randint(0, h)
+            dash, gap = random.randint(6, 20), random.randint(4, 12)
+            length = max(1, int(np.hypot(x2 - x1, y2 - y1)))
+            num_segs = length // (dash + gap)
+            for s in range(num_segs):
+                t0, t1 = s * (dash + gap) / length, (s * (dash + gap) + dash) / length
+                px1 = int(x1 + t0 * (x2 - x1)), int(y1 + t0 * (y2 - y1))
+                px2 = int(x1 + t1 * (x2 - x1)), int(y1 + t1 * (y2 - y1))
+                cv2.line(canvas, px1, px2, color, random.randint(1, 2))
+
+        elif kind == "curve":
+            # Quadratic Bezier via polyline approximation
+            p0 = np.array([random.randint(0, w), random.randint(0, h)], dtype=float)
+            p1c = np.array([random.randint(0, w), random.randint(0, h)], dtype=float)
+            p2 = np.array([random.randint(0, w), random.randint(0, h)], dtype=float)
+            pts = np.array([
+                ((1 - t) ** 2 * p0 + 2 * (1 - t) * t * p1c + t ** 2 * p2).astype(int)
+                for t in np.linspace(0, 1, 40)
+            ])
+            cv2.polylines(canvas, [pts.reshape(-1, 1, 2)], False, color, random.randint(1, 2), cv2.LINE_AA)
 
         elif kind == "text":
             chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-+/"
