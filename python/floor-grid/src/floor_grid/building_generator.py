@@ -19,7 +19,7 @@ class BuildingShapeGenerator:
         Generate a connected building shape with smooth, rectangular edges.
         Ensures no floating islands and maintains connectivity throughout.
         """
-        # Start with a rectangular base in the center
+        # Start rectangular base in the center
         center_r = self.grid.rows // 2
         center_c = self.grid.cols // 2
 
@@ -41,7 +41,7 @@ class BuildingShapeGenerator:
             for c in range(start_c, end_c):
                 self.grid.grid[r][c].is_building_cell = True
 
-        # Grow the building by adding rectangular chunks
+        # Grow building by adding rectangular chunks
         current_cells = self._count_building_cells()
         failed_attempts = 0
         max_failed_attempts = 10

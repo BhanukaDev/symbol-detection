@@ -21,6 +21,7 @@ import {
   Tooltip,
   Grid,
   Slider,
+  Collapse,
   Menu,
   MenuItem,
   ListItemIcon,
@@ -38,6 +39,8 @@ import ZoomOutMapIcon from "@mui/icons-material/ZoomOutMap";
 import TextFieldsIcon from "@mui/icons-material/TextFields";
 import EditIcon from "@mui/icons-material/Edit";
 import CheckIcon from "@mui/icons-material/Check";
+import TuneIcon from "@mui/icons-material/Tune";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 
 const COLORS = {
@@ -94,6 +97,7 @@ export default function DetectorPage() {
   const [confRange, setConfRange] = useState([0, 1]);
   const [confBounds, setConfBounds] = useState([0, 1]);
   const [overlapThresh, setOverlapThresh] = useState(1);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [hoveredIdx, setHoveredIdx] = useState(-1);
   const [hoverPos, setHoverPos] = useState({ x: 0, y: 0 });
   const [classMenuPos, setClassMenuPos] = useState(null);
@@ -677,80 +681,119 @@ export default function DetectorPage() {
                     </Stack>
 
                     {showFilters && (
-                      <Box
-                        sx={{
-                          px: 2.5,
-                          pt: 1.5,
-                          pb: 1,
-                          borderBottom: "1px solid",
-                          borderColor: "divider",
-                        }}
-                      >
-                        {showSizeFilter && (
-                          <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: showConfFilter || showOverlapFilter ? 1 : 0 }}>
-                            <Typography variant="caption" color="text.secondary" noWrap sx={{ minWidth: 72 }}>
-                              Size
+                      <>
+                        <Box
+                          onClick={() => setFiltersOpen((v) => !v)}
+                          sx={{
+                            px: 2.5,
+                            py: 0.75,
+                            borderBottom: "1px solid",
+                            borderColor: "divider",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            cursor: "pointer",
+                            userSelect: "none",
+                            "&:hover": { bgcolor: "grey.50" },
+                          }}
+                        >
+                          <Stack direction="row" spacing={0.75} alignItems="center">
+                            <TuneIcon sx={{ fontSize: 14, color: "text.secondary" }} />
+                            <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                              Detection Filters
                             </Typography>
-                            <Slider
-                              value={sizeRange}
-                              onChange={(_, v) => setSizeRange(v)}
-                              min={sizeBounds[0]}
-                              max={sizeBounds[1]}
-                              valueLabelDisplay="auto"
-                              valueLabelFormat={(v) => `${v}px`}
-                              size="small"
-                              disableSwap
-                              sx={{ color: "secondary.main" }}
-                            />
-                            <Typography variant="caption" color="text.secondary" noWrap sx={{ minWidth: 88, textAlign: "right" }}>
-                              {sizeRange[0]}–{sizeRange[1]}px
-                            </Typography>
+                            {hiddenCount > 0 && (
+                              <Typography variant="caption" color="secondary.main" fontWeight={600}>
+                                · {hiddenCount} hidden
+                              </Typography>
+                            )}
                           </Stack>
-                        )}
-                        {showConfFilter && (
-                          <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: showOverlapFilter ? 1 : 0 }}>
-                            <Typography variant="caption" color="text.secondary" noWrap sx={{ minWidth: 72 }}>
-                              Confidence
-                            </Typography>
-                            <Slider
-                              value={confRange}
-                              onChange={(_, v) => setConfRange(v)}
-                              min={confBounds[0]}
-                              max={confBounds[1]}
-                              step={0.01}
-                              valueLabelDisplay="auto"
-                              valueLabelFormat={(v) => `${(v * 100).toFixed(0)}%`}
-                              size="small"
-                              disableSwap
-                              sx={{ color: "secondary.main" }}
-                            />
-                            <Typography variant="caption" color="text.secondary" noWrap sx={{ minWidth: 88, textAlign: "right" }}>
-                              {(confRange[0] * 100).toFixed(0)}–{(confRange[1] * 100).toFixed(0)}%
-                            </Typography>
-                          </Stack>
-                        )}
-                        {showOverlapFilter && (
-                          <Stack direction="row" spacing={2} alignItems="center">
-                            <Typography variant="caption" color="text.secondary" noWrap sx={{ minWidth: 72 }}>
-                              Max overlap
-                            </Typography>
-                            <Slider
-                              value={overlapThresh}
-                              onChange={(_, v) => setOverlapThresh(v)}
-                              min={0}
-                              max={1}
-                              step={0.05}
-                              valueLabelDisplay="auto"
-                              valueLabelFormat={(v) => `${(v * 100).toFixed(0)}%`}
-                              size="small"
-                              sx={{ color: "secondary.main" }}
-                            />
-                            <Typography variant="caption" color="text.secondary" noWrap sx={{ minWidth: 88, textAlign: "right" }}>
-                              {(overlapThresh * 100).toFixed(0)}% IoU
-                            </Typography>
-                          </Stack>
-                        )}
-                      </Box>
+                          <ExpandMoreIcon
+                            sx={{
+                              fontSize: 16,
+                              color: "text.secondary",
+                              transform: filtersOpen ? "rotate(180deg)" : "rotate(0deg)",
+                              transition: "transform 0.2s",
+                            }}
+                          />
+                        </Box>
+                        <Collapse in={filtersOpen}>
+                          <Box
+                            sx={{
+                              px: 2.5,
+                              pt: 1.5,
+                              pb: 1,
+                              borderBottom: "1px solid",
+                              borderColor: "divider",
+                            }}
+                          >
+                            {showSizeFilter && (
+                              <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: showConfFilter || showOverlapFilter ? 1 : 0 }}>
+                                <Typography variant="caption" color="text.secondary" noWrap sx={{ minWidth: 72 }}>
+                                  Size
+                                </Typography>
+                                <Slider
+                                  value={sizeRange}
+                                  onChange={(_, v) => setSizeRange(v)}
+                                  min={sizeBounds[0]}
+                                  max={sizeBounds[1]}
+                                  valueLabelDisplay="auto"
+                                  valueLabelFormat={(v) => `${v}px`}
+                                  size="small"
+                                  disableSwap
+                                  sx={{ color: "secondary.main" }}
+                                />
+                                <Typography variant="caption" color="text.secondary" noWrap sx={{ minWidth: 88, textAlign: "right" }}>
+                                  {sizeRange[0]}–{sizeRange[1]}px
+                                </Typography>
+                              </Stack>
+                            )}
+                            {showConfFilter && (
+                              <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: showOverlapFilter ? 1 : 0 }}>
+                                <Typography variant="caption" color="text.secondary" noWrap sx={{ minWidth: 72 }}>
+                                  Confidence
+                                </Typography>
+                                <Slider
+                                  value={confRange}
+                                  onChange={(_, v) => setConfRange(v)}
+                                  min={confBounds[0]}
+                                  max={confBounds[1]}
+                                  step={0.01}
+                                  valueLabelDisplay="auto"
+                                  valueLabelFormat={(v) => `${(v * 100).toFixed(0)}%`}
+                                  size="small"
+                                  disableSwap
+                                  sx={{ color: "secondary.main" }}
+                                />
+                                <Typography variant="caption" color="text.secondary" noWrap sx={{ minWidth: 88, textAlign: "right" }}>
+                                  {(confRange[0] * 100).toFixed(0)}–{(confRange[1] * 100).toFixed(0)}%
+                                </Typography>
+                              </Stack>
+                            )}
+                            {showOverlapFilter && (
+                              <Stack direction="row" spacing={2} alignItems="center">
+                                <Typography variant="caption" color="text.secondary" noWrap sx={{ minWidth: 72 }}>
+                                  Max overlap
+                                </Typography>
+                                <Slider
+                                  value={overlapThresh}
+                                  onChange={(_, v) => setOverlapThresh(v)}
+                                  min={0}
+                                  max={1}
+                                  step={0.05}
+                                  valueLabelDisplay="auto"
+                                  valueLabelFormat={(v) => `${(v * 100).toFixed(0)}%`}
+                                  size="small"
+                                  sx={{ color: "secondary.main" }}
+                                />
+                                <Typography variant="caption" color="text.secondary" noWrap sx={{ minWidth: 88, textAlign: "right" }}>
+                                  {(overlapThresh * 100).toFixed(0)}% IoU
+                                </Typography>
+                              </Stack>
+                            )}
+                          </Box>
+                        </Collapse>
+                      </>
                     )}
 
                     {focusedDet && (

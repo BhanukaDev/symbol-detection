@@ -26,20 +26,16 @@ def apply_gradient_fade(
         
     h, w = img.shape[:2]
     
-    # Generate the gradient mask (values 0.0 to 1.0)
     if gradient_type == "linear":
-        # Random angle for linear gradient
         angle = random.uniform(0, 2 * np.pi)
         cx, cy = w / 2, h / 2
         
-        # Create meshgrid
         x, y = np.meshgrid(np.arange(w), np.arange(h))
         
-        # Rotate coordinates
+        # Rotate coordinates by the random angle
         dist = (x - cx) * np.cos(angle) + (y - cy) * np.sin(angle)
         
-        # Normalize to 0-1 range
-        # The max distance from center in a rectangle is the corner
+        # Normalize to 0-1 range (max distance is from center to corner)
         max_dist = np.sqrt(cx**2 + cy**2)
         mask = (dist + max_dist) / (2 * max_dist)
         
@@ -48,16 +44,15 @@ def apply_gradient_fade(
         cx = random.uniform(0, w)
         cy = random.uniform(0, h)
         
-        # Create meshgrid
         x, y = np.meshgrid(np.arange(w), np.arange(h))
         
-        # Calculate distance
+        # Calculate euclidean distance from center
         dist = np.sqrt((x - cx)**2 + (y - cy)**2)
         
-        # Normalize. Max distance is approx diagonal length
+        # Normalize to 0-1 range using diagonal length
         max_dist = np.sqrt(w**2 + h**2)
         mask = 1.0 - (dist / max_dist)
-        # Randomly invert radial mask (fade center vs fade edges)
+        # Randomly invert to fade either center or edges
         if random.random() > 0.5:
             mask = 1.0 - mask
             
@@ -65,34 +60,26 @@ def apply_gradient_fade(
         # Fallback to uniform noise if unknown type
         mask = np.random.uniform(0, 1, (h, w))
 
-    # Clamp and scale mask to alpha range
+    # Clamp and scale mask to 0-1
     mask = np.clip(mask, 0.0, 1.0)
     
-    # Adjust random intensity curve (gamma) to make fade non-linear sometimes
+    # Apply random gamma correction for non-linear fade effect
     gamma = random.uniform(0.5, 2.0)
     mask = mask ** gamma
     
-    # Map 0-1 mask to min_alpha-max_alpha
+    # Map mask to [min_alpha, max_alpha] range
     alpha_map = min_alpha + mask * (max_alpha - min_alpha)
     
-    # Apply to image
+    # Apply alpha blending to the image
     result = img.copy()
     
-    # Check if image has alpha channel
     if img.shape[2] == 4:
         # Scale existing alpha channel
         result[:, :, 3] = (result[:, :, 3].astype(np.float32) * alpha_map).astype(np.uint8)
     else:
-        # If RGB/BGR, blend towards white (assuming white background paper)
-        # Fade = 1.0 means original pixel
-        # Fade = 0.0 means white pixel
-        
+        # Blend RGB/BGR towards white (simulates worn/faded paper)
         white = np.ones_like(result) * 255
-        
-        # Expand dimensions of alpha_map to match channels
         alpha_3ch = np.dstack([alpha_map] * 3)
-        
-        # Blend
         blended = result.astype(np.float32) * alpha_3ch + white * (1.0 - alpha_3ch)
         result = np.clip(blended, 0, 255).astype(np.uint8)
         

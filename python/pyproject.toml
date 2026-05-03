@@ -23,6 +23,8 @@ dependencies = [
 
 [project.scripts]
 generate-dataset = "symbol_detection.dataset.cli:main"
+generate-symbol-dataset = "symbol_detection.dataset.symbol_generator:main"
+visualize-dataset = "symbol_detection.dataset.visualizer:main"
 train-model = "symbol_detection.training.cli:main"
 run-inference = "symbol_detection.inference.cli:main"
 

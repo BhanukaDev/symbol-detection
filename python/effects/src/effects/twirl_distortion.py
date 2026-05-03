@@ -29,19 +29,16 @@ def twirl_distortion(image, center=None, radius=None, angle=0.5):
 
     for y in range(rows):
         for x in range(cols):
-            # Calculate distance and angle relative to the center
             dx = x - center[0]
             dy = y - center[1]
             distance = np.sqrt(dx*dx + dy*dy)
             theta = np.arctan2(dy, dx)
 
             if distance < radius:
-                # Apply twirl effect
-                # The rotation angle decreases with distance from the center
+                # Twirl effect with rotation angle decreasing from center outward
                 dist_factor = (radius - distance) / radius
                 new_theta = theta + angle * dist_factor * dist_factor
 
-                # Map back to new coordinates
                 map_x[y, x] = center[0] + distance * np.cos(new_theta)
                 map_y[y, x] = center[1] + distance * np.sin(new_theta)
             else:

@@ -39,16 +39,16 @@ CHECKPOINTS = [
         "filename":  "ckpt_v2clean_epoch500.pth",
         "gdrive_id": "1aEIEb1OeJPC3y3trYyU9Y7gowZ_jANjI",
     },
-    # {
-    #     "label":     "v5 · epoch 260",
-    #     "filename":  "ckpt_v5_epoch260.pth",
-    #     "gdrive_id": "14Izos7SngzVjaIEXS4fJWRPeXsUAq7OH",
-    # },
-    # {
-    #     "label":     "v6 · epoch 160",
-    #     "filename":  "ckpt_v6_epoch160.pth",
-    #     "gdrive_id": "1sbbUBaEyg3jJCTyzSbsZo0R_VzD6VpEz",
-    # },
+    {
+        "label":     "v5 · epoch 260",
+        "filename":  "ckpt_v5_epoch260.pth",
+        "gdrive_id": "14Izos7SngzVjaIEXS4fJWRPeXsUAq7OH",
+    },
+    {
+        "label":     "v6 · epoch 160",
+        "filename":  "ckpt_v6_epoch160.pth",
+        "gdrive_id": "1sbbUBaEyg3jJCTyzSbsZo0R_VzD6VpEz",
+    },
     # {
     #     "label":     "v6 · epoch 120",
     #     "filename":  "ckpt_v6_epoch120.pth",

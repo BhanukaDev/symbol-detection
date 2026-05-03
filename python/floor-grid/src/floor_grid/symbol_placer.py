@@ -200,7 +200,6 @@ class SymbolPlacer:
         self.placed_symbols: List[PlacedSymbol] = []
         self.placed_distractors: List[PlacedSymbol] = []
 
-        # Calculate image dimensions
         self.img_width = grid.cols * cell_size
         self.img_height = grid.rows * cell_size
 
@@ -217,7 +216,6 @@ class SymbolPlacer:
 
         min_r, max_r, min_c, max_c = bounds
 
-        # Convert to pixels and account for wall thickness
         half_wall = self.wall_thickness // 2
         padding = half_wall + self.symbol_padding
 
@@ -309,23 +307,19 @@ class SymbolPlacer:
         h, w = image.shape[:2]
         center = (w / 2, h / 2)
 
-        # Get the rotation matrix
         rotation_matrix = cv2.getRotationMatrix2D(center, angle_degrees, 1.0)
-
-        # Calculate new bounding box size
         new_w, new_h = self._get_rotated_bbox_size(w, h, angle_degrees)
 
-        # Adjust the rotation matrix to account for the new canvas size
+        # Adjust rotation matrix for new canvas size
         rotation_matrix[0, 2] += (new_w - w) / 2
         rotation_matrix[1, 2] += (new_h - h) / 2
 
-        # Determine border value based on whether image has alpha channel
+        # Set border color based on alpha channel
         if image.shape[2] == 4:
             border_value = (0, 0, 0, 0)  # Transparent
         else:
             border_value = (255, 255, 255)  # White background
 
-        # Apply the rotation
         rotated = cv2.warpAffine(
             image,
             rotation_matrix,
@@ -413,32 +407,26 @@ class SymbolPlacer:
         bounds = self._get_room_bounds_pixels(room)
         x_min, y_min, x_max, y_max = bounds
 
-        # Calculate scaled dimensions
         scaled_width = int(symbol.width * scale)
         scaled_height = int(symbol.height * scale)
 
-        # Calculate bounding box size after rotation
         bbox_width, bbox_height = self._get_rotated_bbox_size(
             scaled_width, scaled_height, rotation
         )
 
-        # Check if symbol fits in room bounds at all
         available_width = x_max - x_min - bbox_width
         available_height = y_max - y_min - bbox_height
 
         if available_width < 0 or available_height < 0:
             return None  # Symbol too big for room
 
-        # Try random positions
         for _ in range(max_attempts):
             x = random.randint(x_min, x_min + available_width)
             y = random.randint(y_min, y_min + available_height)
 
-            # Check if the rectangle is fully inside the room
             if not self._is_rect_in_room(x, y, bbox_width, bbox_height, room):
                 continue
 
-            # Check for overlap with existing symbols
             existing_obstacles = self.placed_symbols + self.placed_distractors
             if not self._check_overlap(
                 x, y, bbox_width, bbox_height, existing_obstacles
@@ -488,38 +476,33 @@ class SymbolPlacer:
                 continue
 
             # 1. Place Furniture/Distractors First (Background)
-            # They are larger and should be placed before small symbols to avoid collision issues
+            # Placed before symbols to avoid collision issues
             num_furn = random.randint(num_distractors_per_room[0], num_distractors_per_room[1])
             for _ in range(num_furn):
                 distractor = symbol_loader.get_random_distractor()
                 if distractor:
-                    # Furniture is usually larger, maybe scale it up slightly?
-                    # Or keep same scale range.
                     scale = random.uniform(scale_range[0], scale_range[1]) * 1.2 
-                    rotation = random.uniform(0, 360) # Furniture can be rotated
+                    rotation = random.uniform(0, 360)
                     self.place_symbol_in_room(distractor, room_idx, scale, rotation)
 
             # 2. Place Electrical Symbols (Foreground/Important)
             num_symbols = random.randint(symbols_per_room[0], symbols_per_room[1])
 
             for _ in range(num_symbols):
-                # Get a random symbol
                 symbol_class = random.choice(available_classes)
-                symbol = symbol_loader.get_random_distractor() if False else symbol_loader.get_random_symbol(symbol_class)
+                symbol = symbol_loader.get_random_symbol(symbol_class)
 
                 if symbol is None:
                     continue
 
-                # Random scale
                 scale = random.uniform(scale_range[0], scale_range[1])
 
-                # Rotation: discrete snapping (e.g. 0/90/180/270) or continuous
+                # Use discrete rotations if provided, otherwise continuous range
                 if discrete_rotations:
                     rotation = random.choice(discrete_rotations)
                 else:
                     rotation = random.uniform(rotation_range[0], rotation_range[1])
 
-                # Try to place it
                 self.place_symbol_in_room(symbol, room_idx, scale, rotation)
 
         return self.placed_symbols
@@ -536,10 +519,8 @@ class SymbolPlacer:
         """
         result = img.copy()
         
-        # 1. Geometric Distortion (Shape)
-        # Apply gentle geometric distortion with 50% chance
+        # 1. Geometric Distortion (Shape) - 50% chance
         if random.random() < 0.5:
-            # Pick a geometric effect
             if random.random() < 0.5:
                 geom_type = "water_wave"
             else:
@@ -547,26 +528,21 @@ class SymbolPlacer:
             
             try:
                 if geom_type == "water_wave" and water_wave_distortion:
-                    # Extremely subtle distortion (barely visible wiggle)
                     amplitude = int(random.uniform(0.5, 0.8))
                     frequency = random.uniform(0.005, 0.015)
                     result = water_wave_distortion(result, amplitude=amplitude, frequency=frequency)
                 
                 elif geom_type == "twirl" and twirl_distortion:
-                    # Very slight twist
                     angle = random.uniform(0.02, 0.1)
                     radius = int(min(result.shape[:2]) // 2)
                     result = twirl_distortion(result, angle=angle, radius=radius)
             except Exception as e:
-                pass # Ignore geometric errors
+                pass
 
-        # 2. Visual Degradation (Fading/Ink)
-        # Apply fading effect with 40% chance
+        # 2. Visual Degradation (Fading/Ink) - 40% chance
         if random.random() < 0.4 and apply_gradient_fade:
             try:
-                # Randomize fade intensity (keep it legible)
-                # min_alpha affects how transparent the faded parts get
-                min_alpha = random.uniform(0.3, 0.6)
+                min_alpha = random.uniform(0.3, 0.6)  # Fade intensity (keeps legibility)
                 result = apply_gradient_fade(result, min_alpha=min_alpha, max_alpha=1.0)
             except Exception as e:
                 print(f"Warning: Fade effect failed: {e}")
@@ -591,7 +567,7 @@ class SymbolPlacer:
         """
         result = floor_plan_img.copy()
 
-        # Render distractors (furniture) first, then electrical symbols
+        # Render distractors first (background), then electrical symbols (foreground)
         all_items = self.placed_distractors + self.placed_symbols
 
         for placed in all_items:
@@ -599,7 +575,6 @@ class SymbolPlacer:
             scale = placed.scale
             rotation = placed.rotation
 
-            # Scale the symbol image
             scaled_width = int(symbol.width * scale)
             scaled_height = int(symbol.height * scale)
 
@@ -612,29 +587,22 @@ class SymbolPlacer:
                 interpolation=cv2.INTER_AREA if scale < 1 else cv2.INTER_LINEAR,
             )
 
-            # Apply symbol effects if enabled
-            # Note: We might want different effects for distractors? 
-            # For now applying same effects (fading/distortion) is good for realism
             if self.apply_symbol_effects:
                 scaled_img = self._apply_symbol_effects(scaled_img)
 
-            # Apply rotation
             rotated_img = self._rotate_image(scaled_img, rotation)
             rot_height, rot_width = rotated_img.shape[:2]
 
-            x, y = placed.x, placed.y # Top-left coordinates
-
-            # Calculate where to place it on the canvas
+            x, y = placed.x, placed.y
             x_start = x
             y_start = y
             x_end = x + rot_width
             y_end = y + rot_height
 
-            # Clipping checks
             if x_start >= result.shape[1] or y_start >= result.shape[0]:
                 continue
             
-            # Handle negative start coordinates (cropping top/left)
+            # Crop symbol at image boundaries
             img_x_start = 0
             img_y_start = 0
             if x_start < 0:
@@ -644,37 +612,27 @@ class SymbolPlacer:
                 img_y_start = -y_start
                 y_start = 0
 
-            # Handle end coordinates (cropping bottom/right)
             x_end = min(x_end, result.shape[1])
             y_end = min(y_end, result.shape[0])
             
-            # Dimensions to copy
             copy_w = x_end - x_start
             copy_h = y_end - y_start
 
             if copy_w <= 0 or copy_h <= 0:
                 continue
 
-            # Crop the rotated symbol image
             rotated_img_cropped = rotated_img[img_y_start:img_y_start+copy_h, img_x_start:img_x_start+copy_w]
 
-            # Handle alpha channel
             if use_alpha and rotated_img_cropped.shape[2] == 4:
-                # Extract alpha channel
                 alpha = rotated_img_cropped[:, :, 3] / 255.0
                 alpha = alpha[:, :, np.newaxis]
 
-                # Extract RGB channels
                 symbol_rgb = rotated_img_cropped[:, :, :3]
-
-                # Get the region of interest from the result
                 roi = result[y_start:y_end, x_start:x_end]
 
-                # Blend using alpha
                 blended = (symbol_rgb * alpha + roi * (1 - alpha)).astype(np.uint8)
                 result[y_start:y_end, x_start:x_end] = blended
             else:
-                # No alpha, just copy RGB
                 if rotated_img_cropped.shape[2] == 4:
                     symbol_rgb = rotated_img_cropped[:, :, :3]
                 else:
